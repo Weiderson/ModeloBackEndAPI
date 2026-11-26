@@ -6,9 +6,6 @@
 + LINKDIN
 www.linkedin.com/in/weiderson
 
-+ CANAL
-www.youtube.com/@weidersonmendes
-
 + EMAIL
 weidersn@protonmail.com
 
