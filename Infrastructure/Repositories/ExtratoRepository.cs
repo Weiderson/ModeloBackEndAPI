@@ -1,10 +1,9 @@
-using DesafioBackendAPI.Domain.Model;
-using DesafioBackendAPI.Domain.Repositories;
+﻿using DesafioBackendAPI.Domain.Model;
 using Microsoft.EntityFrameworkCore;
 
 namespace DesafioBackendAPI.Infrastructure.Repositories
 {
-    public class ExtratoRepository : IExtratoRepository
+    public class ExtratoRepository : IExtratroRepository
     {
         private readonly Contexto _db;
 
@@ -15,18 +14,10 @@ namespace DesafioBackendAPI.Infrastructure.Repositories
 
         #region EXTRATO
 
-        public async Task<IEnumerable<Transacao>> GetExtratoAsync(
-            int id,
-            int periodo,
-            CancellationToken cancellationToken = default)
+        public async Task<IEnumerable<Transacao>> GetExtratoAsync(int id, int periodo)
         {
 
-            var dataLimite = DateTime.Now.AddDays(-periodo);
-            var extrato = await _db.Transacao
-                .Where(w => (w.ContaId == id || w.ContaId_Destino == id) && w.DtInclusao >= dataLimite)
-                .OrderByDescending(d => d.DtInclusao)
-                .ToListAsync(cancellationToken)
-                .ConfigureAwait(false);
+            var extrato = await _db.Transacao.Where(w => w.ContaId == id && w.DtInclusao >= DateTime.Now.AddDays(-periodo) || w.ContaId_Destino == id).OrderByDescending(d => d.DtInclusao).ToListAsync().ConfigureAwait(false);
 
             return extrato ?? Enumerable.Empty<Transacao>();
         }

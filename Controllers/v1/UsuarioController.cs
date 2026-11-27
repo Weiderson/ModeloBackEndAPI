@@ -1,171 +1,230 @@
-using Asp.Versioning;
+﻿using Asp.Versioning;
 using AutoMapper;
 using DesafioBackendAPI.Application.DTOs;
-using DesafioBackendAPI.Application.Interfaces;
+using DesafioBackendAPI.Application.Services.Token;
 using DesafioBackendAPI.Domain.Model;
-using DesafioBackendAPI.Domain.Repositories;
-using Microsoft.AspNetCore.Authorization;
+using DesafioBackendAPI.Infrastructure;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Cryptography;
 using System.Text;
 
-namespace DesafioBackendAPI.Controllers.v1;
-
-[ApiController]
-[AllowAnonymous]
-[Route("api/v{version:apiVersion}/Usuario")]
-[ApiVersion("1.0")]
-public class UsuarioController : ControllerBase
+namespace DesafioBackendAPI.Controllers.v1
 {
-    private readonly IUsuarioRepository _repository;
-    private readonly IMapper _mapper;
-    private readonly ITokenService _tokenService;
-    private readonly ILogger<UsuarioController> _logger;
-
-    public UsuarioController(
-        IUsuarioRepository repository,
-        IMapper mapper,
-        ITokenService tokenService,
-        ILogger<UsuarioController> logger)
+    [ApiController]
+    [Route("api/v{version:apiVersion}/Usuario")]
+    [ApiVersion("1.0")]
+    public class UsuarioController : ControllerBase
     {
-        _repository = repository;
-        _mapper = mapper;
-        _tokenService = tokenService;
-        _logger = logger;
-    }
+        private readonly Contexto _db;
+        private readonly IUsuarioRepository _repository;
+        private readonly IMapper _mapper;
+        private readonly IConfiguration _configuration;
+        private readonly ITokenService _tokenService;
+        private readonly ILogger<UsuarioController> _logger;
 
-    [HttpGet]
-    public async Task<IActionResult> Get(CancellationToken cancellationToken)
-    {
-        _logger.LogInformation("Retrieving users.");
-        var users = (await _repository.GetAsync(cancellationToken).ConfigureAwait(false)).ToList();
-        if (users.Count == 0)
-            return NotFound("Lista de usuários é nula ou vazia.");
+        public UsuarioController(Contexto db, IUsuarioRepository repository, IMapper mapper, IConfiguration configuration, ILogger<UsuarioController> logger)
+        {
+            _db = db;
+            _repository = repository;
+            _mapper = mapper;
+            _configuration = configuration;
+            _tokenService = new TokenService(configuration);
+            _logger = logger;
+        }
 
-        return Ok(_mapper.Map<IEnumerable<UsuarioDTO>>(users));
-    }
+        #region CRUD
 
-    [HttpGet("{email}")]
-    public async Task<IActionResult> Get(string email, CancellationToken cancellationToken)
-    {
-        var user = await _repository.GetAsync(email, cancellationToken).ConfigureAwait(false);
-        if (user == null)
-            return NotFound("Usuário não encontrado.");
+        [HttpGet]
+        public async Task<IActionResult> Get()
+        {
+            try
+            {
+                _logger.LogInformation("Buscando registros...");
 
-        return Ok(_mapper.Map<UsuarioDTO>(user));
-    }
+                var usuarios = (await _repository.GetAsync().ConfigureAwait(false)).ToList();
 
-    [HttpPost]
-    public async Task<IActionResult> Add(
-        [FromQuery] UsuarioDTO usuarioDTO,
-        CancellationToken cancellationToken)
-    {
-        if (usuarioDTO == null)
-            return BadRequest("Dados inválidos.");
+                if (!usuarios.Any())
+                    return NotFound("Lista de usuários é nula ou vazia.");
 
-        if (string.IsNullOrWhiteSpace(usuarioDTO.Email))
-            return BadRequest("Email inválido.");
+                var usuariosDTO = _mapper.Map<IEnumerable<UsuarioDTO>>(usuarios);
 
-        if (string.IsNullOrWhiteSpace(usuarioDTO.Senha))
-            return BadRequest("Senha inválida.");
+                _logger.LogInformation("Registros retornados...");
+                return Ok(usuariosDTO);
+            }
+            catch (Exception ex)
+            {
+                _logger.Log(LogLevel.Error, "Ocorreu um erro na requisição: " + ex.Message);
+                return NotFound(ex.Message);
+            }
+        }
 
-        if (string.IsNullOrWhiteSpace(usuarioDTO.Nome))
-            return BadRequest("Nome inválido.");
+        [HttpGet("{email}")]
+        public async Task<IActionResult> Get(string email)
+        {
+            try
+            {
+                _logger.LogInformation("Buscando registro...");
 
-        var existingUser = await _repository
-            .UsuarioExisteAsync(usuarioDTO.Email, cancellationToken)
-            .ConfigureAwait(false);
-        if (existingUser != null)
-            return BadRequest("Usuário já existe.");
+                var usuario = await _repository.GetAsync(email).ConfigureAwait(false);
+                if (usuario == null)
+                    return NotFound("Usuário não encontrado.");
 
-        var usuario = _mapper.Map<Usuario>(usuarioDTO);
-        usuario.Id = null;
-        usuario.DtInclusao = DateTime.Now;
-        SetPasswordHash(usuario, usuarioDTO.Senha);
+                var usuarioDTO = _mapper.Map<UsuarioDTO>(usuario);
 
-        await _repository.AddAsync(usuario, cancellationToken).ConfigureAwait(false);
-        _logger.LogInformation("User {UserId} created.", usuario.Id);
-        return Ok();
-    }
+                _logger.LogInformation("Registro retornado...");
+                return Ok(usuarioDTO);
+            }
+            catch (Exception ex)
+            {
+                _logger.Log(LogLevel.Error, "Ocorreu um erro na requisição: " + ex.Message);
+                return NotFound(ex.Message);
+            }
+        }
 
-    [HttpPut]
-    public async Task<IActionResult> Update(
-        [FromQuery] UsuarioDTO usuarioDTO,
-        CancellationToken cancellationToken)
-    {
-        if (usuarioDTO == null)
-            return BadRequest("Dados inválidos.");
+        [HttpPost]
+        public async Task<IActionResult> Add([FromQuery] UsuarioDTO usuarioDTO)
+        {
+            try
+            {
+                _logger.LogInformation("Adicionando registro...");
 
-        if (string.IsNullOrWhiteSpace(usuarioDTO.Email))
-            return BadRequest("Email inválido.");
+                if (usuarioDTO == null)
+                    return BadRequest("Dados inválidos.");
 
-        if (string.IsNullOrWhiteSpace(usuarioDTO.Senha))
-            return BadRequest("Senha inválida.");
+                if (usuarioDTO.Email == null)
+                    return BadRequest("Email inválido.");
 
-        if (string.IsNullOrWhiteSpace(usuarioDTO.Nome))
-            return BadRequest("Nome inválido.");
+                if (usuarioDTO.Senha == null)
+                    return BadRequest("Senha inválida.");
 
-        var usuario = await _repository
-            .GetTrackedAsync(usuarioDTO.Email, cancellationToken)
-            .ConfigureAwait(false);
-        if (usuario == null)
-            return NotFound("Usuário não encontrado.");
+                if (usuarioDTO.Nome == null)
+                    return BadRequest("Nome inválido.");
 
-        usuario.Nome = usuarioDTO.Nome;
-        usuario.DtAlteracao = DateTime.Now;
-        SetPasswordHash(usuario, usuarioDTO.Senha);
 
-        await _repository.UpdateAsync(usuario, cancellationToken).ConfigureAwait(false);
-        _logger.LogInformation("User {UserId} updated.", usuario.Id);
-        return Ok();
-    }
+                var usuarioExiste = _repository.UsuarioExisteAsync(usuarioDTO.Email);
+                if (usuarioExiste != null)
+                    return BadRequest("Usuário já existe.");
 
-    [HttpDelete("{email}")]
-    public async Task<IActionResult> Delete(string email, CancellationToken cancellationToken)
-    {
-        var usuario = await _repository.GetTrackedAsync(email, cancellationToken).ConfigureAwait(false);
-        if (usuario == null)
-            return NotFound("Usuário não encontrado.");
+                var usuario = _mapper.Map<Usuario>(usuarioDTO);
+                usuario.Id = null;
+                usuario.DtInclusao = DateTime.Now;
 
-        await _repository.DeleteAsync(usuario, cancellationToken).ConfigureAwait(false);
-        _logger.LogInformation("User {UserId} deleted.", usuario.Id);
-        return Ok();
-    }
+                using (var hmac = new HMACSHA256())
+                {
+                    usuario.SenhaHash = hmac.ComputeHash(Encoding.UTF8.GetBytes(usuarioDTO.Senha));
+                    usuario.SenhaSalt = hmac.Key;
+                }
 
-    [HttpPost("Login")]
-    public async Task<IActionResult> Login(
-        [FromQuery] UsuarioDTO usuarioDTO,
-        CancellationToken cancellationToken)
-    {
-        if (usuarioDTO == null)
-            return BadRequest("Dados inválidos.");
+                await Task.Run(() => _repository.AddAsync(usuario));
+                _logger.LogInformation("Registro adicionado...");
+                return Ok();
+            }
+            catch (Exception ex)
+            {
+                _logger.Log(LogLevel.Error, "Ocorreu um erro na requisição: " + ex.Message);
+                return NotFound(ex.Message);
+            }
+        }
 
-        if (string.IsNullOrWhiteSpace(usuarioDTO.Email))
-            return BadRequest("Email inválido.");
+        [HttpPut]
+        public async Task<IActionResult> Update([FromQuery] UsuarioDTO usuarioDTO)
+        {
+            try
+            {
+                _logger.LogInformation("Atualizando registro...");
 
-        if (string.IsNullOrWhiteSpace(usuarioDTO.Senha))
-            return BadRequest("Senha inválida.");
+                if (usuarioDTO == null)
+                    return BadRequest("Dados inválidos.");
+                if (usuarioDTO.Email == null)
+                    return BadRequest("Email inválido.");
+                if (usuarioDTO.Senha == null)
+                    return BadRequest("Senha inválida.");
+                if (usuarioDTO.Nome == null)
+                    return BadRequest("Nome inválido.");
 
-        var usuario = await _repository
-            .UsuarioExisteExcluidoAsync(usuarioDTO.Email, cancellationToken)
-            .ConfigureAwait(false);
-        if (usuario?.SenhaSalt == null || usuario.SenhaHash == null)
-            return BadRequest("Usuário inexistente ou excluído.");
+                var usuario = await _repository.GetAsync(usuarioDTO.Email);
+                if (usuario == null)
+                    return NotFound("Usuário não encontrado.");
 
-        using var hmac = new HMACSHA256(usuario.SenhaSalt);
-        var result = hmac.ComputeHash(Encoding.UTF8.GetBytes(usuarioDTO.Senha));
-        if (!CryptographicOperations.FixedTimeEquals(usuario.SenhaHash, result))
-            return BadRequest("Senha inválida.");
+                _mapper.Map<Usuario>(usuarioDTO);
+                usuario.DtAlteracao = DateTime.Now;
 
-        var token = _tokenService.CriarToken(usuario);
-        _logger.LogInformation("User login succeeded for user {UserId}.", usuario.Id);
-        return Ok(new { Token = token });
-    }
+                using (var hmac = new HMACSHA256())
+                {
+                    usuario.SenhaHash = hmac.ComputeHash(Encoding.UTF8.GetBytes(usuarioDTO.Senha));
+                    usuario.SenhaSalt = hmac.Key;
+                }
 
-    private static void SetPasswordHash(Usuario usuario, string password)
-    {
-        using var hmac = new HMACSHA256();
-        usuario.SenhaHash = hmac.ComputeHash(Encoding.UTF8.GetBytes(password));
-        usuario.SenhaSalt = hmac.Key;
+                await Task.Run(() => _repository.UpdateAsync(usuario)).ConfigureAwait(false);
+                _logger.LogInformation("Registro atualizado...");
+                return Ok();
+            }
+            catch (Exception ex)
+            {
+                _logger.Log(LogLevel.Error, "Ocorreu um erro na requisição: " + ex.Message);
+                return NotFound(ex.Message);
+            }
+        }
+
+        [HttpDelete("{email}")]
+        public async Task<IActionResult> Delete(string email)
+        {
+            try
+            {
+                _logger.LogInformation("Excluindo registro");
+                var usuario = await _repository.GetAsync(email);
+                if (usuario == null)
+                    return NotFound("Usuário não encontrado.");
+
+                await Task.Run(() => _repository.DeleteAsync(usuario)).ConfigureAwait(false);
+                _logger.LogInformation("Registro excluído.");
+                return Ok();
+            }
+            catch (Exception ex)
+            {
+                _logger.Log(LogLevel.Error, "Ocorreu um erro na requisição: " + ex.Message);
+                return NotFound(ex.Message);
+            }
+        }
+
+        [HttpPost("Login")]
+        public async Task<IActionResult> Login([FromQuery] UsuarioDTO usuarioDTO)
+        {
+            try
+            {
+                _logger.LogInformation("Efetuando login");
+                if (usuarioDTO == null)
+                    return BadRequest("Dados inválidos.");
+
+                if (usuarioDTO.Email == null)
+                    return BadRequest("Email inválido.");
+
+                if (usuarioDTO.Senha == null)
+                    return BadRequest("Senha inválida.");
+
+                var usuario = await _repository.UsuarioExisteExcluidoAsync(usuarioDTO.Email).ConfigureAwait(false);
+                if (usuario == null)
+                    return BadRequest("Usuário inexistente ou excluído.");
+
+                var hash = new HMACSHA256(usuario.SenhaSalt);
+                var result = hash.ComputeHash(Encoding.UTF8.GetBytes(usuarioDTO.Senha));
+
+                if (!usuario.SenhaHash.SequenceEqual(result))
+                    return BadRequest("Senha inválida.");
+
+                var token = _tokenService.CriarToken(usuario);
+
+                hash.Dispose();
+                _logger.LogInformation("Login efetuado");
+                return Ok(new { Token = token });
+            }
+            catch (Exception ex)
+            {
+                _logger.Log(LogLevel.Error, "Ocorreu um erro na requisição: " + ex.Message);
+                return NotFound(ex.Message);
+            }
+        }
+
+        #endregion
     }
 }

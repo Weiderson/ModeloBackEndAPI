@@ -1,162 +1,228 @@
-using Asp.Versioning;
+﻿using Asp.Versioning;
 using AutoMapper;
 using DesafioBackendAPI.Application.DTOs;
 using DesafioBackendAPI.Application.Enums;
-using DesafioBackendAPI.Domain.Interfaces;
 using DesafioBackendAPI.Domain.Model;
-using DesafioBackendAPI.Domain.Repositories;
-using Microsoft.AspNetCore.Authorization;
+using DesafioBackendAPI.Infrastructure;
+using DesafioBackendAPI.Infrastructure.Repositories;
 using Microsoft.AspNetCore.Mvc;
 
-namespace DesafioBackendAPI.Controllers.v1;
-
-[ApiController]
-[AllowAnonymous]
-[Route("api/v{version:apiVersion}/Transacao")]
-[ApiVersion("1.0")]
-public class TransacaoController : ControllerBase
+namespace DesafioBackendAPI.Controllers.v1
 {
-    private readonly ITransacaoRepository _repository;
-    private readonly ILogger<TransacaoController> _logger;
-    private readonly IMapper _mapper;
-    private readonly IUnitOfWork _unitOfWork;
-    private readonly IBaseRepository _baseRepository;
-
-    public TransacaoController(
-        ITransacaoRepository repository,
-        ILogger<TransacaoController> logger,
-        IMapper mapper,
-        IUnitOfWork unitOfWork,
-        IBaseRepository baseRepository)
+    [ApiController]
+    [Route("api/v{version:apiVersion}/Transacao")]
+    [ApiVersion("1.0")]
+    public class TransacaoController : ControllerBase
     {
-        _repository = repository;
-        _logger = logger;
-        _mapper = mapper;
-        _unitOfWork = unitOfWork;
-        _baseRepository = baseRepository;
-    }
+        private readonly Contexto _db;
+        private readonly ITransacaoRepository _repository;
+        private readonly ILogger<TransacaoController> _logger;
+        private readonly IMapper _mapper;
+        private readonly IUnitOfWork _transaction;
+        private readonly IBaseRepository _baseRepository;
 
-    [HttpPost]
-    public async Task<IActionResult> Add(
-        [FromQuery] TransacaoDTO transacaoDto,
-        CancellationToken cancellationToken)
-    {
-        if (transacaoDto == null)
-            return BadRequest("Dados não podem ser nulos.");
-
-        if (!Enum.IsDefined(typeof(TransacaoTipo), transacaoDto.Tipo))
-            return BadRequest("Tipo de transação inválido.");
-
-        if (transacaoDto.Valor <= 0)
-            return BadRequest("Valor deve ser maior que zero.");
-
-        if (transacaoDto.Tipo == TransacaoTipo.Transferencia)
+        public TransacaoController(Contexto db, ITransacaoRepository repository, ILogger<TransacaoController> logger, IMapper mapper, IUnitOfWork transaction, IBaseRepository baseRepository)
         {
-            if (transacaoDto.ContaId_Destino == null)
-                return BadRequest("Conta de destino inválida.");
-
-            if (transacaoDto.ContaId == transacaoDto.ContaId_Destino)
-                return BadRequest("Conta de origem e destino são iguais.");
+            _db = db;
+            _repository = repository;
+            _logger = logger;
+            _mapper = mapper;
+            _transaction = transaction;
+            _baseRepository = baseRepository;
         }
 
-        await using var transaction = await _unitOfWork
-            .BeginTransactionAsync(cancellationToken)
-            .ConfigureAwait(false);
+        #region TRANSAÇÕES
 
-        _logger.LogInformation("Creating transaction for account {AccountId}.", transacaoDto.ContaId);
-
-        var sourceAccountActive = await _baseRepository
-            .GetSituacaoAsync(transacaoDto.ContaId, cancellationToken)
-            .ConfigureAwait(false);
-        if (!sourceAccountActive)
-            return BadRequest("Conta inativa e/ou excluída!");
-
-        if (transacaoDto.Tipo is TransacaoTipo.Pagamento or TransacaoTipo.Saque
-            or TransacaoTipo.Transferencia)
+        [HttpPost]
+        public async Task<IActionResult> Add([FromQuery] TransacaoDTO transacao_dto)
         {
-            var sourceBalance = await _baseRepository
-                .GetSaldoAsync(transacaoDto.ContaId, cancellationToken)
-                .ConfigureAwait(false);
-            if (sourceBalance < transacaoDto.Valor)
-                return BadRequest("Saldo insuficiente para realizar a transação.");
+            using (var transaction = _transaction.BeginTransaction())
+            {
+                try
+                {
+                    _logger.LogInformation("Adicionando registro...");
 
-            await _repository.UpdateSaldoAsync(
-                    transacaoDto.ContaId,
-                    sourceBalance - transacaoDto.Valor,
-                    cancellationToken)
-                .ConfigureAwait(false);
+                    if (transacao_dto == null)
+                        return BadRequest("Dados não podem ser nulos.");
+
+                    if (!Enum.IsDefined(typeof(TransacaoTipo), transacao_dto.Tipo))
+                        return BadRequest("Tipo de transação inválido.");
+
+                    // VERIFICAÇÃO INICIAL - CONTA
+                    var situacao = await Task.Run(() => _baseRepository.GetSituacaoAsync(transacao_dto.ContaId));
+
+                    if (!situacao)
+                        return BadRequest("Conta inativa e/ou excluída!");
+
+                    // PAGAMENTO - SAQUE
+                    if (transacao_dto.Tipo == TransacaoTipo.Pagamento || transacao_dto.Tipo == TransacaoTipo.Saque)
+                    {
+                        if (transacao_dto.Valor <= 0)
+                            return BadRequest("Valor deve ser maior que zero.");
+
+                        transacao_dto.ContaId_Destino = null;
+
+                        var saldo = await Task.Run(() => _baseRepository.GetSaldoAsync(transacao_dto.ContaId)).ConfigureAwait(false);
+                        if (saldo < transacao_dto.Valor)
+                            return BadRequest("Saldo insuficiente para realizar a transação.");
+
+                        var saldo_atualizado = saldo - transacao_dto.Valor;
+
+                        transacao_dto.ContaId_Destino = null;
+
+                        await Task.Run(() => _repository.UpdateSaldoAsync(transacao_dto.ContaId, saldo_atualizado));
+
+                        await _transaction.SaveChangesAsync();
+                    }
+
+                    //TRANSFERÊNCIA
+                    else if (transacao_dto.Tipo == TransacaoTipo.Transferencia)
+                    {
+                        try
+                        {
+                            if (transacao_dto.Valor <= 0)
+                                return BadRequest("Valor deve ser maior que zero.");
+
+                            if (transacao_dto.ContaId_Destino == null)
+                                return BadRequest("Conta de destino inválida.");
+
+                            if (transacao_dto.ContaId == transacao_dto.ContaId_Destino)
+                                return BadRequest("Conta de origem e destino são iguais.");
+
+                            if (string.IsNullOrEmpty(transacao_dto.ContaId_Destino.ToString()))
+                                return BadRequest("Agência e conta de destino devem ser informadas.");
+
+                            var saldo = await Task.Run(() => _baseRepository.GetSaldoAsync(transacao_dto.ContaId)).ConfigureAwait(false);
+                            if (saldo < transacao_dto.Valor)
+                                return BadRequest("Saldo insuficiente para realizar a transação.");
+
+                            var saldo_atualizado = saldo - transacao_dto.Valor;
+
+
+                            var situacao_conta_destino = await Task.Run(() => _baseRepository.GetSituacaoAsync(transacao_dto.ContaId_Destino ?? 0)).ConfigureAwait(false);
+
+                            if (!situacao_conta_destino)
+                                return BadRequest("Conta de destino inativa e/ou excluída!");
+
+
+                            await Task.Run(() => _repository.UpdateContaDestinoAsync(transacao_dto.ContaId_Destino ?? 0, transacao_dto.Valor))
+                                .ConfigureAwait(false);
+                            await _transaction.SaveChangesAsync().ConfigureAwait(false);
+
+                            await Task.Run(() => _repository.UpdateSaldoAsync(transacao_dto.ContaId, saldo_atualizado)).ConfigureAwait(false);
+                            await _transaction.SaveChangesAsync().ConfigureAwait(false);
+
+
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.Log(LogLevel.Error, "Ocorreu um erro na requisição: " + ex.Message);
+                            return BadRequest(ex.Message);
+                        }
+                    }
+
+                    // DEPÓSITO
+                    else if (transacao_dto.Tipo == TransacaoTipo.Deposito)
+                    {
+                        if (transacao_dto.Valor <= 0)
+                            return BadRequest("Valor deve ser maior que zero.");
+
+                        transacao_dto.ContaId_Destino = null;
+
+                        var saldo = await Task.Run(() => _baseRepository.GetSaldoAsync(transacao_dto.ContaId));
+
+                        var saldo_atualizado = saldo + transacao_dto.Valor;
+
+                        transacao_dto.ContaId_Destino = null;
+
+                        await Task.Run(() => _repository.UpdateSaldoAsync(transacao_dto.ContaId, saldo_atualizado)).ConfigureAwait(false);
+
+                        await _transaction.SaveChangesAsync().ConfigureAwait(false);
+                    }
+
+
+                    var _transacao = _mapper.Map<Transacao>(transacao_dto);
+                    _transacao.DtInclusao = DateTime.Now;
+                    _transacao.Id = null;
+                    _transacao.Descricao.ToUpper();
+
+                    // ADICIONA A TRANSAÇÃO DA CONTA DE ORIGEM
+                    await Task.Run(() => _repository.AddAsync(_transacao)).ConfigureAwait(false);
+                    await _transaction.SaveChangesAsync().ConfigureAwait(false);
+
+                    //throw new Exception("Erro de teste!");
+
+                    transaction.Commit();
+
+                    _logger.LogInformation("Transação id: " + _transacao.Id + " adicionada!");
+
+                    return Ok();
+                }
+                catch (Exception ex)
+                {
+                    _logger.Log(LogLevel.Error, "Ocorreu um erro na requisição: " + ex.Message);
+
+                    transaction.Rollback();
+
+                    return BadRequest(ex.Message);
+                }
+            }
         }
-        else if (transacaoDto.Tipo == TransacaoTipo.Deposito)
+
+        [HttpGet]
+        public async Task<IActionResult> Get()
         {
-            var sourceBalance = await _baseRepository
-                .GetSaldoAsync(transacaoDto.ContaId, cancellationToken)
-                .ConfigureAwait(false);
+            try
+            {
+                _logger.LogInformation("Buscando registros...");
 
-            await _repository.UpdateSaldoAsync(
-                    transacaoDto.ContaId,
-                    sourceBalance + transacaoDto.Valor,
-                    cancellationToken)
-                .ConfigureAwait(false);
+                var _transacoes = await Task.Run(() => _repository.GetAsync()).ConfigureAwait(false);
+
+                if (!_transacoes.Any())
+                    return NotFound("Lista de transacões nula ou vazia.");
+
+                var _transacoesDTO = _mapper.Map<IEnumerable<TransacaoDTO>>(_transacoes);
+
+                _logger.LogInformation("Registros retornados.");
+
+                return Ok(_transacoesDTO); //Retorna solicitação com DTOs
+            }
+            catch (Exception ex)
+            {
+                _logger.Log(LogLevel.Error, "Ocorreu um erro na requisição: " + ex.Message);
+                return NotFound(ex.Message);
+            }
         }
 
-        if (transacaoDto.Tipo == TransacaoTipo.Transferencia)
+        [HttpGet("{id}")]
+        public async Task<IActionResult> Get(int id)
         {
-            var destinationId = transacaoDto.ContaId_Destino!.Value;
-            var destinationAccountActive = await _baseRepository
-                .GetSituacaoAsync(destinationId, cancellationToken)
-                .ConfigureAwait(false);
-            if (!destinationAccountActive)
-                return BadRequest("Conta de destino inativa e/ou excluída!");
+            try
+            {
+                _logger.LogInformation("Buscando registro...");
 
-            await _repository.UpdateContaDestinoAsync(
-                    destinationId,
-                    transacaoDto.Valor,
-                    cancellationToken)
-                .ConfigureAwait(false);
+                var situacao = await Task.Run(() => _baseRepository.GetSituacaoAsync(id)).ConfigureAwait(false);
+                if (!situacao)
+                    return BadRequest("Conta inativa e/ou excluída!");
+
+                var _transacao = await _repository.GetTransacaoAsync(id).ConfigureAwait(false);
+
+                if (!_transacao.Any())
+                    return NotFound("Lista de transacões nula ou vazia.");
+
+                var _transacoesDTO = _mapper.Map<IEnumerable<TransacaoDTO>>(_transacao);
+
+                _logger.LogInformation("Registro retornado.");
+
+                return Ok(_transacoesDTO); //Retorna solicitação com DTOs
+            }
+            catch (Exception ex)
+            {
+                _logger.Log(LogLevel.Error, "Ocorreu um erro na requisição: " + ex.Message);
+                return NotFound(ex.Message);
+            }
         }
 
-        var transacao = _mapper.Map<Transacao>(transacaoDto);
-        transacao.DtInclusao = DateTime.Now;
-        transacao.Id = null;
-        transacao.Descricao = transacao.Descricao.ToUpperInvariant();
-
-        await _repository.AddAsync(transacao, cancellationToken).ConfigureAwait(false);
-        await _unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
-
-        _logger.LogInformation(
-            "Transaction {TransactionId} created for account {AccountId}.",
-            transacao.Id,
-            transacaoDto.ContaId);
-
-        return Ok();
-    }
-
-    [HttpGet]
-    public async Task<IActionResult> Get(CancellationToken cancellationToken)
-    {
-        var transacoes = await _repository.GetAsync(cancellationToken).ConfigureAwait(false);
-        if (!transacoes.Any())
-            return NotFound("Lista de transacões nula ou vazia.");
-
-        var transacoesDto = _mapper.Map<IEnumerable<TransacaoDTO>>(transacoes);
-        return Ok(transacoesDto);
-    }
-
-    [HttpGet("{id}")]
-    public async Task<IActionResult> Get(int id, CancellationToken cancellationToken)
-    {
-        var accountActive = await _baseRepository
-            .GetSituacaoAsync(id, cancellationToken)
-            .ConfigureAwait(false);
-        if (!accountActive)
-            return BadRequest("Conta inativa e/ou excluída!");
-
-        var transacoes = await _repository.GetTransacaoAsync(id, cancellationToken).ConfigureAwait(false);
-        if (!transacoes.Any())
-            return NotFound("Lista de transacões nula ou vazia.");
-
-        var transacoesDto = _mapper.Map<IEnumerable<TransacaoDTO>>(transacoes);
-        return Ok(transacoesDto);
+        #endregion TRANSAÇÕEES
     }
 }
