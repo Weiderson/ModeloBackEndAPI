@@ -1,4 +1,7 @@
-﻿using DesafioBackendAPI.Domain.Model;
+using DesafioBackendAPI.Application.Options;
+using DesafioBackendAPI.Application.Interfaces;
+using DesafioBackendAPI.Domain.Model;
+using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
@@ -9,16 +12,15 @@ namespace DesafioBackendAPI.Application.Services.Token
     public class TokenService : ITokenService
     {
         private readonly SymmetricSecurityKey _Key;
+        private readonly string _issuer;
+        private readonly string _audience;
 
-        public TokenService(IConfiguration configuration)
+        public TokenService(IOptions<JwtOptions> options)
         {
-            var jwtKey = configuration["Jwt:Key"];
-            if (string.IsNullOrWhiteSpace(jwtKey))
-                throw new InvalidOperationException("JWT signing key 'Jwt:Key' is required.");
-
-            _Key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey));
+            _Key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(options.Value.Key));
+            _issuer = options.Value.Issuer;
+            _audience = options.Value.Audience;
         }
-
 
         public string CriarToken(Usuario usuario)
         {
@@ -32,6 +34,8 @@ namespace DesafioBackendAPI.Application.Services.Token
             var description = new SecurityTokenDescriptor
             {
                 Subject = new ClaimsIdentity(claims),
+                Issuer = _issuer,
+                Audience = _audience,
                 Expires = DateTime.UtcNow.AddMinutes(60),
                 SigningCredentials = creds
             };

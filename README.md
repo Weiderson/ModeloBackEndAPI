@@ -30,12 +30,14 @@ weidersn@protonmail.com
 + Em seguida, comente o código novamente. Caso prefira, rode os arquivos .sql para popular o banco.
 
 ### CONFIGURAÇÃO LOCAL
-As credenciais do MySQL e a chave de assinatura JWT não são armazenadas no repositório. Configure-as por variáveis de ambiente do .NET antes de executar a aplicação:
+O `appsettings.json` contém valores exclusivamente de teste. Configure os valores próprios para qualquer ambiente não destinado a testes usando variáveis de ambiente do .NET:
 
 + `ConnectionStrings__DefaultConnection`: string de conexão do MySQL.
 + `Jwt__Key`: chave secreta usada para assinar tokens JWT.
++ `Jwt__Issuer`: emissor esperado dos tokens JWT.
++ `Jwt__Audience`: audiência esperada dos tokens JWT.
 
-Configure esses valores no ambiente de execução, no gerenciador de segredos do seu sistema ou com o Secret Manager do .NET. A aplicação falha na inicialização quando qualquer valor obrigatório estiver ausente.
+Configure-os no ambiente de execução, no gerenciador de segredos do seu sistema ou com o Secret Manager do .NET. A aplicação falha na inicialização quando qualquer valor obrigatório estiver ausente.
 
 ### CONTA
 + Será possível excluir a CONTA caso o registro não possua saldo.

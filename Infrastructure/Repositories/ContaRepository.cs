@@ -1,4 +1,5 @@
-﻿using DesafioBackendAPI.Domain.Model;
+using DesafioBackendAPI.Domain.Model;
+using DesafioBackendAPI.Domain.Repositories;
 using Microsoft.EntityFrameworkCore;
 
 namespace DesafioBackendAPI.Infrastructure.Repositories
@@ -17,36 +18,54 @@ namespace DesafioBackendAPI.Infrastructure.Repositories
 
         #region CRUD
 
-        public async Task AddAsync(Conta conta)
+        public async Task AddAsync(Conta conta, CancellationToken cancellationToken = default)
         {
-            _db.Conta.Add(conta);
-            await _db.SaveChangesAsync().ConfigureAwait(false);
+            await _db.Conta.AddAsync(conta, cancellationToken).ConfigureAwait(false);
+            await _db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         }
 
-        public async Task<IEnumerable<Conta>> GetAsync()
+        public async Task<IEnumerable<Conta>> GetAsync(CancellationToken cancellationToken = default)
         {
-            var contas = await _db.Conta.ToListAsync().ConfigureAwait(false);
+            var contas = await _db.Conta.ToListAsync(cancellationToken).ConfigureAwait(false);
             return contas;
         }
 
-        public async Task<Conta> GetAsync(int id)
+        public async Task<Conta> GetAsync(int id, CancellationToken cancellationToken = default)
         {
-            var conta = await _db.Conta.FirstOrDefaultAsync(f => f.Id == id);
+            var conta = await _db.Conta.FirstOrDefaultAsync(f => f.Id == id, cancellationToken).ConfigureAwait(false);
             return conta;
         }
 
-        public async Task DeleteAsync(int id)
+        public async Task<Conta?> GetTrackedAsync(int id, CancellationToken cancellationToken = default)
+        {
+            return await _db.Conta.AsTracking()
+                .FirstOrDefaultAsync(conta => conta.Id == id, cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        public async Task<Conta?> GetByAgencyAndNumberAsync(
+            string agency,
+            string number,
+            CancellationToken cancellationToken = default)
+        {
+            return await _db.Conta.AsNoTracking()
+                .FirstOrDefaultAsync(conta =>
+                    conta.Agencia.Trim() == agency.Trim() && conta.Numero.Trim() == number.Trim(),
+                    cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        public async Task DeleteAsync(int id, CancellationToken cancellationToken = default)
         {
             var httpContext = _httpContextAccessor.HttpContext;
-            string caminho = httpContext?.Request.Path.ToString();
+            var caminho = httpContext?.Request.Path.ToString();
 
             if (caminho == null)
-                throw new Exception("Caminho não encontrado.");
+                throw new InvalidOperationException("Request path is unavailable.");
 
-
-            var conta = await GetAsync(id).ConfigureAwait(false);
+            var conta = await GetTrackedAsync(id, cancellationToken).ConfigureAwait(false);
             if (conta is null)
-                throw new Exception("Conta inexistente.");
+                throw new KeyNotFoundException("Conta inexistente.");
 
             if (caminho.StartsWith("/api/v1"))
             {
@@ -59,14 +78,14 @@ namespace DesafioBackendAPI.Infrastructure.Repositories
                 _db.Conta.Remove(conta);
             }
 
-            await _db.SaveChangesAsync();
+            await _db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         }
 
-        public async Task UpdateAsync(Conta conta)
+        public async Task UpdateAsync(Conta conta, CancellationToken cancellationToken = default)
         {
             _db.Conta.Update(conta);
 
-            await _db.SaveChangesAsync().ConfigureAwait(false);
+            await _db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         }
 
         #endregion CRUD

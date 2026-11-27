@@ -1,6 +1,5 @@
-﻿using DesafioBackendAPI.Domain.Model;
+using DesafioBackendAPI.Domain.Interfaces;
 using Microsoft.EntityFrameworkCore.Storage;
-using System.Data;
 
 namespace DesafioBackendAPI.Infrastructure.Repositories
 {
@@ -13,15 +12,14 @@ namespace DesafioBackendAPI.Infrastructure.Repositories
             _db = db ?? throw new ArgumentNullException(nameof(db));
         }
 
-        public IDbTransaction BeginTransaction()
+        public Task<IDbContextTransaction> BeginTransactionAsync(CancellationToken cancellationToken = default)
         {
-            var transaction = _db.Database.BeginTransaction();
-            return transaction.GetDbTransaction();
+            return _db.Database.BeginTransactionAsync(cancellationToken);
         }
 
-        public Task SaveChangesAsync()
+        public Task SaveChangesAsync(CancellationToken cancellationToken = default)
         {
-            return _db.SaveChangesAsync();
+            return _db.SaveChangesAsync(cancellationToken);
         }
 
     }

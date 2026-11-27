@@ -1,23 +1,29 @@
 ﻿using Asp.Versioning;
 using Asp.Versioning.ApiExplorer;
+using DesafioBackendAPI.Application.Interfaces;
+using DesafioBackendAPI.Application.Options;
+using DesafioBackendAPI.Application.Services;
 using DesafioBackendAPI.Application.Services.Token;
 using DesafioBackendAPI.Configure.Swagger;
-using DesafioBackendAPI.Domain.Model;
 using DesafioBackendAPI.Infrastructure;
-using DesafioBackendAPI.Infrastructure.Repositories;
+using DesafioBackendAPI.Infrastructure.Exceptions;
+using DesafioBackendAPI.Infrastructure.Configuration;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
-using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using Swashbuckle.AspNetCore.SwaggerGen;
 using System.ComponentModel;
 using System.Reflection;
+using System.ComponentModel.DataAnnotations;
 using System.Text;
 using System.Text.Json.Serialization;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddControllers();
+builder.Services.AddControllers()
+    .AddJsonOptions(options =>
+        options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter()));
 
 builder.Services.AddEndpointsApiExplorer();
 
@@ -34,8 +40,6 @@ builder.Services.AddApiVersioning(options =>
 });
 
 builder.Services.AddAutoMapper(AppDomain.CurrentDomain.GetAssemblies());
-builder.Services.AddControllersWithViews();
-
 
 builder.Services.AddSwaggerGen(options =>
 {
@@ -45,6 +49,15 @@ builder.Services.AddSwaggerGen(options =>
 builder.Services.AddTransient<IConfigureOptions<SwaggerGenOptions>, ConfigureSwaggerGenOptions>();
 builder.Services.AddSwaggerJWT();
 
+builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
+builder.Services.AddProblemDetails();
+
+builder.Services.AddOptions<JwtOptions>()
+    .Bind(builder.Configuration.GetSection(JwtOptions.SectionName))
+    .ValidateDataAnnotations()
+    .Validate(options => !string.IsNullOrWhiteSpace(options.Issuer), "JWT issuer is required.")
+    .Validate(options => !string.IsNullOrWhiteSpace(options.Audience), "JWT audience is required.")
+    .ValidateOnStart();
 
 builder.Services.AddCors(options =>
 {
@@ -57,25 +70,19 @@ builder.Services.AddCors(options =>
         });
 });
 
-var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
-if (string.IsNullOrWhiteSpace(connectionString))
-    throw new InvalidOperationException("Connection string 'DefaultConnection' is required.");
-
-builder.Services.AddDbContext<Contexto>(opt => opt.UseMySQL(connectionString));
-builder.Services.AddScoped<IContaRepository, ContaRepository>();
-builder.Services.AddScoped<ITransacaoRepository, TransacaoRepository>();
-builder.Services.AddScoped<IExtratroRepository, ExtratoRepository>();
-builder.Services.AddScoped<IUsuarioRepository, UsuarioRepository>();
-builder.Services.AddScoped<IBaseRepository, BaseRepository>();
-builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
+builder.Services.AddPersistenceServices(builder.Configuration);
 builder.Services.AddScoped<ITokenService, TokenService>();
-
-
-
-builder.Services.AddControllers().AddJsonOptions(options =>
-    options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter()));
+builder.Services.AddHttpClient<IRetornaReceita, RetornaReceita>(client =>
+    client.BaseAddress = new Uri("https://receitaws.com.br/v1/"));
 
 builder.Services.AddHttpContextAccessor();
+
+builder.Services.AddAuthorization(options =>
+{
+    options.FallbackPolicy = new AuthorizationPolicyBuilder()
+        .RequireAuthenticatedUser()
+        .Build();
+});
 
 builder.Services.AddAuthentication(options =>
 {
@@ -84,29 +91,27 @@ builder.Services.AddAuthentication(options =>
 }
 ).AddJwtBearer(options =>
 {
-    var jwtKey = builder.Configuration["Jwt:Key"];
-    if (string.IsNullOrWhiteSpace(jwtKey))
-        throw new InvalidOperationException("JWT signing key 'Jwt:Key' is required.");
+    var jwtOptions = builder.Configuration.GetSection(JwtOptions.SectionName).Get<JwtOptions>()
+        ?? throw new ValidationException("JWT configuration is required.");
+    Validator.ValidateObject(jwtOptions, new ValidationContext(jwtOptions), validateAllProperties: true);
 
     options.TokenValidationParameters = new TokenValidationParameters
     {
-        ValidateIssuer = false,
-        ValidateAudience = false,
+        ValidateIssuer = true,
+        ValidIssuer = jwtOptions.Issuer,
+        ValidateAudience = true,
+        ValidAudience = jwtOptions.Audience,
         ValidateLifetime = true,
         ValidateIssuerSigningKey = true,
-        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey)),
+        RequireExpirationTime = true,
+        RequireSignedTokens = true,
+        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtOptions.Key)),
         ClockSkew = TimeSpan.Zero
     };
 });
 
-
 var app = builder.Build();
-//Adicionar novos registros para as tabelas.
-//using (var scope = app.Services.CreateScope())
-//{
-//    var dbContext = scope.ServiceProvider.GetRequiredService<Contexto>();
-//    DataSeeder.SeedData(scope.ServiceProvider);
-//}
+app.UseExceptionHandler();
 
 var versionDescriptionProvider = app.Services.GetRequiredService<IApiVersionDescriptionProvider>();
 if (app.Environment.IsDevelopment() || app.Environment.IsProduction())

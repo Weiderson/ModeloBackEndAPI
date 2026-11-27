@@ -12,7 +12,10 @@ namespace DesafioBackendAPI.Application.Services
         /// </summary>
         /// <param name="localArquivo">Caminho relativo do arquivo.</param>
         /// <param name="contaDto">Objeto DTO contendo informações da conta e o arquivo.</param>
-        public static async Task SalvarArquivoDisco(string localArquivo, ContaDTO contaDto)
+        public static async Task SalvarArquivoDisco(
+            string localArquivo,
+            ContaDTO contaDto,
+            CancellationToken cancellationToken = default)
         {
             if (contaDto.Arquivo == null)
                 throw new ArgumentException("Arquivo da conta não informado.", nameof(contaDto));
@@ -27,7 +30,7 @@ namespace DesafioBackendAPI.Application.Services
             {
                 await using var fileStream = new FileStream(caminhoCompleto, FileMode.CreateNew, FileAccess.Write, FileShare.None);
                 fileCreated = true;
-                await contaDto.Arquivo.CopyToAsync(fileStream).ConfigureAwait(false);
+                await contaDto.Arquivo.CopyToAsync(fileStream, cancellationToken).ConfigureAwait(false);
             }
             catch
             {
@@ -48,9 +51,11 @@ namespace DesafioBackendAPI.Application.Services
         /// </summary>
         /// <param name="filePath">Caminho do arquivo.</param>
         /// <returns>Conteúdo do arquivo como string.</returns>
-        public static async Task<Byte[]> RecuperarArquivoDisco(string local_arquivo_completo)
+        public static Task<Byte[]> RecuperarArquivoDisco(
+            string local_arquivo_completo,
+            CancellationToken cancellationToken = default)
         {
-            return await System.IO.File.ReadAllBytesAsync(local_arquivo_completo);
+            return System.IO.File.ReadAllBytesAsync(local_arquivo_completo, cancellationToken);
         }
     }
 }

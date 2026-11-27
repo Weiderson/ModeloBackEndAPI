@@ -8,6 +8,10 @@
 		<GenerateDocumentationFile>True</GenerateDocumentationFile>
 	</PropertyGroup>
 	<ItemGroup>
+	  <Content Remove="Tests\**\*" />
+	  <Compile Remove="Tests\**\*.cs" />
+	  <EmbeddedResource Remove="Tests\**\*" />
+	  <None Remove="Tests\**\*" />
 	  <Compile Remove="Application\Enums\Tipo.cs" />
 	  <Compile Remove="Application\Services\IServiceCollection.cs" />
 	  <Compile Remove="Controllers\v2\ClientesController.cs" />
