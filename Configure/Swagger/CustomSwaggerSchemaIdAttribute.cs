@@ -1,4 +1,4 @@
-﻿//namespace DesafioBackendAPI.Configure.Swagger
+﻿//namespace ModeloBackEndAPI.Configure.Swagger
 //{
 //    [AttributeUsage(AttributeTargets.Class | AttributeTargets.Interface)]
 //    public class CustomSwaggerSchemaIdAttribute : Attribute

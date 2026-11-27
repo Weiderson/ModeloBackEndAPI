@@ -1,10 +1,16 @@
 ﻿using System.Security.Cryptography;
 using System.Text;
 
-namespace DesafioBackendAPI.Application.Services
+namespace ModeloBackEndAPI.Application.Services
 {
+    /// <summary>
+    /// Fornece operações criptográficas relacionadas a senhas.
+    /// </summary>
     public static class UsuarioService
     {
+        /// <summary>
+        /// Gera um hash criptográfico para a senha informada.
+        /// </summary>
         public static string GerarHash(string senha)
         {
             using (var hmac = new HMACSHA256())
@@ -15,6 +21,9 @@ namespace DesafioBackendAPI.Application.Services
             }
         }
 
+        /// <summary>
+        /// Gera o salt criptográfico para a senha informada.
+        /// </summary>
         public static string GerarSalt(string senha)
         {
             using (var hmac = new HMACSHA256())

@@ -1,7 +1,13 @@
 ﻿using Microsoft.OpenApi.Models;
 
+/// <summary>
+/// Fornece extensões para configurar a integração do Swagger.
+/// </summary>
 public static class SwaggerServiceExtensions
 {
+    /// <summary>
+    /// Registra o esquema JWT na configuração do Swagger.
+    /// </summary>
     public static IServiceCollection AddSwaggerJWT(this IServiceCollection services)
     {
         services.AddSwaggerGen(c =>

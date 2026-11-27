@@ -1,14 +1,17 @@
 ﻿using Asp.Versioning;
 using AutoMapper;
-using DesafioBackendAPI.Application.DTOs;
-using DesafioBackendAPI.Application.Services;
-using DesafioBackendAPI.Domain.Model;
-using DesafioBackendAPI.Infrastructure;
+using ModeloBackEndAPI.Application.DTOs;
+using ModeloBackEndAPI.Application.Services;
+using ModeloBackEndAPI.Domain.Model;
+using ModeloBackEndAPI.Infrastructure;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
-namespace DesafioBackendAPI.Controllers.v2
+namespace ModeloBackEndAPI.Controllers.v2
 {
+    /// <summary>
+    /// Controlador responsável pelas operações de <c>Conta</c>.
+    /// </summary>
     [ApiController]
     [Route("api/v{version:apiVersion}/Conta")]
     [ApiVersion("2.0")]
@@ -20,6 +23,9 @@ namespace DesafioBackendAPI.Controllers.v2
         private readonly IMapper _mapper;
         private readonly IBaseRepository _baseRepository;
 
+        /// <summary>
+        /// Inicializa uma nova instância de <c>ContaController</c>.
+        /// </summary>
         public ContaController(Contexto db, ILogger<ContaController> logger, IContaRepository repository, IMapper mapper, IBaseRepository baseRepository)
         {
             _db = db;
@@ -29,6 +35,9 @@ namespace DesafioBackendAPI.Controllers.v2
             _baseRepository = baseRepository;
         }
 
+        /// <summary>
+        /// Obtém os registros ou o recurso solicitado.
+        /// </summary>
         [HttpGet("{Id}")]
         public async Task<IActionResult> Get(int Id)
         {
@@ -65,6 +74,9 @@ namespace DesafioBackendAPI.Controllers.v2
 
         #region EXCLUSÃO FÍSICA
 
+        /// <summary>
+        /// Exclui o registro indicado.
+        /// </summary>
         [Authorize]
         [HttpDelete("{id}")]
         public async Task<IActionResult> Delete(int id)

@@ -3,10 +3,16 @@ using Microsoft.OpenApi.Any;
 using Microsoft.OpenApi.Models;
 using Swashbuckle.AspNetCore.SwaggerGen;
 
-namespace DesafioBackendAPI.Configure.Swagger
+namespace ModeloBackEndAPI.Configure.Swagger
 {
+    /// <summary>
+    /// Define valores padrão para operações documentadas no Swagger.
+    /// </summary>
     public class SwaggerDefaultValues : IOperationFilter
     {
+        /// <summary>
+        /// Aplica os valores padrão aos metadados da operação Swagger.
+        /// </summary>
         public void Apply(OpenApiOperation operation, OperationFilterContext context)
         {
             var apiDescription = context.ApiDescription;

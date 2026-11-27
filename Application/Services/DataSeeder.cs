@@ -1,10 +1,16 @@
-﻿using DesafioBackendAPI.Domain.Model;
-using DesafioBackendAPI.Infrastructure;
+﻿using ModeloBackEndAPI.Domain.Model;
+using ModeloBackEndAPI.Infrastructure;
 
-namespace DesafioBackendAPI.Application.Services
+namespace ModeloBackEndAPI.Application.Services
 {
+    /// <summary>
+    /// Fornece operações para carregar dados de exemplo.
+    /// </summary>
     public static class DataSeeder
     {
+        /// <summary>
+        /// Insere os dados de exemplo no banco de dados.
+        /// </summary>
         public static void SeedData(IServiceProvider serviceProvider)
         {
             using (var scope = serviceProvider.CreateScope())

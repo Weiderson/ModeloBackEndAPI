@@ -1,10 +1,10 @@
 ﻿using Asp.Versioning;
 using Asp.Versioning.ApiExplorer;
-using DesafioBackendAPI.Application.Services.Token;
-using DesafioBackendAPI.Configure.Swagger;
-using DesafioBackendAPI.Domain.Model;
-using DesafioBackendAPI.Infrastructure;
-using DesafioBackendAPI.Infrastructure.Repositories;
+using ModeloBackEndAPI.Application.Services.Token;
+using ModeloBackEndAPI.Configure.Swagger;
+using ModeloBackEndAPI.Domain.Model;
+using ModeloBackEndAPI.Infrastructure;
+using ModeloBackEndAPI.Infrastructure.Repositories;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
@@ -16,6 +16,9 @@ using System.Text;
 using System.Text.Json.Serialization;
 
 var builder = WebApplication.CreateBuilder(args);
+var jwtKey = builder.Configuration["Jwt:Key"];
+if (string.IsNullOrWhiteSpace(jwtKey))
+    throw new InvalidOperationException("Configuration 'Jwt:Key' is required.");
 
 builder.Services.AddControllers();
 
@@ -33,7 +36,10 @@ builder.Services.AddApiVersioning(options =>
     options.SubstituteApiVersionInUrl = true;
 });
 
-builder.Services.AddAutoMapper(AppDomain.CurrentDomain.GetAssemblies());
+builder.Services.AddAutoMapper(config =>
+{
+    config.AddMaps(AppDomain.CurrentDomain.GetAssemblies());
+});
 builder.Services.AddControllersWithViews();
 
 
@@ -87,7 +93,7 @@ builder.Services.AddAuthentication(options =>
         ValidateAudience = false,
         ValidateLifetime = true,
         ValidateIssuerSigningKey = true,
-        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"])),
+        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey)),
         ClockSkew = TimeSpan.Zero
     };
 });
@@ -110,7 +116,7 @@ if (app.Environment.IsDevelopment() || app.Environment.IsProduction())
         foreach (var description in versionDescriptionProvider.ApiVersionDescriptions)
         {
             options.SwaggerEndpoint($"/swagger/{description.GroupName}/swagger.json",
-                $"Desafio Back-End APi - {description.GroupName.ToUpper()}");
+                $"ModeloBackEndAPI - {description.GroupName.ToUpper()}");
         }
     });
 }

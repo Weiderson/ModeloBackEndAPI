@@ -1,14 +1,20 @@
-﻿using DesafioBackendAPI.Domain.Model;
+﻿using ModeloBackEndAPI.Domain.Model;
 using Microsoft.EntityFrameworkCore;
 
-namespace DesafioBackendAPI.Infrastructure.Repositories
+namespace ModeloBackEndAPI.Infrastructure.Repositories
 {
+    /// <summary>
+    /// Implementa as operações de persistência de <c>Conta</c>.
+    /// </summary>
     public class ContaRepository : IContaRepository
     {
         private readonly Contexto _db;
         private readonly IHttpContextAccessor _httpContextAccessor;
 
 
+        /// <summary>
+        /// Inicializa uma nova instância de <c>Conta Repository</c>.
+        /// </summary>
         public ContaRepository(Contexto db, IHttpContextAccessor httpContextAccessor)
         {
             _db = db ?? throw new ArgumentNullException(nameof(db));
@@ -17,28 +23,40 @@ namespace DesafioBackendAPI.Infrastructure.Repositories
 
         #region CRUD
 
+        /// <summary>
+        /// Adiciona o registro informado de forma assíncrona.
+        /// </summary>
         public async Task AddAsync(Conta conta)
         {
             _db.Conta.Add(conta);
             await _db.SaveChangesAsync().ConfigureAwait(false);
         }
 
+        /// <summary>
+        /// Obtém os registros de forma assíncrona.
+        /// </summary>
         public async Task<IEnumerable<Conta>> GetAsync()
         {
             var contas = await _db.Conta.ToListAsync().ConfigureAwait(false);
             return contas;
         }
 
-        public async Task<Conta> GetAsync(int id)
+        /// <summary>
+        /// Obtém os registros de forma assíncrona.
+        /// </summary>
+        public async Task<Conta?> GetAsync(int id)
         {
             var conta = await _db.Conta.FirstOrDefaultAsync(f => f.Id == id);
             return conta;
         }
 
+        /// <summary>
+        /// Exclui ou marca o registro como excluído, conforme a versão da API.
+        /// </summary>
         public async Task DeleteAsync(int id)
         {
             var httpContext = _httpContextAccessor.HttpContext;
-            string caminho = httpContext?.Request.Path.ToString();
+            string? caminho = httpContext?.Request.Path.ToString();
 
             if (caminho == null)
                 throw new Exception("Caminho não encontrado.");
@@ -62,6 +80,9 @@ namespace DesafioBackendAPI.Infrastructure.Repositories
             await _db.SaveChangesAsync();
         }
 
+        /// <summary>
+        /// Atualiza o registro informado de forma assíncrona.
+        /// </summary>
         public async Task UpdateAsync(Conta conta)
         {
             _db.Conta.Update(conta);

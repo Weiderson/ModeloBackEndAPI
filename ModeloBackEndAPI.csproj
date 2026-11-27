@@ -11,11 +11,15 @@
 	  <Compile Remove="Application\Enums\Tipo.cs" />
 	  <Compile Remove="Application\Services\IServiceCollection.cs" />
 	  <Compile Remove="Controllers\v2\ClientesController.cs" />
+	  <Compile Remove="tests\**\*.cs" />
+	  <Content Remove="tests\**\*" />
+	  <EmbeddedResource Remove="tests\**\*" />
+	  <None Remove="tests\**\*" />
 	</ItemGroup>
 	<ItemGroup>
 		<PackageReference Include="Asp.Versioning.Mvc" Version="8.1.0" />
 		<PackageReference Include="Asp.Versioning.Mvc.ApiExplorer" Version="8.1.0" />
-		<PackageReference Include="AutoMapper" Version="14.0.0" />
+		<PackageReference Include="AutoMapper" Version="15.0.0" />
 		<PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="9.0.4" />
 		<PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="9.0.4" />
 		<PackageReference Include="Microsoft.EntityFrameworkCore" Version="9.0.4" />

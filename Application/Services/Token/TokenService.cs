@@ -1,21 +1,34 @@
-﻿using DesafioBackendAPI.Domain.Model;
+﻿using ModeloBackEndAPI.Domain.Model;
 using Microsoft.IdentityModel.Tokens;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
 
-namespace DesafioBackendAPI.Application.Services.Token
+namespace ModeloBackEndAPI.Application.Services.Token
 {
+    /// <summary>
+    /// Representa <c>Token Service</c>.
+    /// </summary>
     public class TokenService : ITokenService
     {
         private readonly SymmetricSecurityKey _Key;
 
+        /// <summary>
+        /// Inicializa uma nova instância de <c>Token Service</c>.
+        /// </summary>
         public TokenService(IConfiguration configuration)
         {
-            _Key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(configuration["Jwt:Key"]));
+            var jwtKey = configuration["Jwt:Key"];
+            if (string.IsNullOrWhiteSpace(jwtKey))
+                throw new InvalidOperationException("Configuration 'Jwt:Key' is required.");
+
+            _Key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey));
         }
 
 
+        /// <summary>
+        /// Executa a operação <c>Criar Token</c>.
+        /// </summary>
         public string CriarToken(Usuario usuario)
         {
             var claims = new List<Claim>

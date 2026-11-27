@@ -1,8 +1,8 @@
-﻿using DesafioBackendAPI.Application.ViewModel;
+﻿using ModeloBackEndAPI.Application.ViewModel;
 using Newtonsoft.Json;
 using System.Net.Http.Headers;
 
-namespace DesafioBackendAPI.Application.Services
+namespace ModeloBackEndAPI.Application.Services
 {
     /// <summary>
     /// Serviço responsável por retornar o nome associado a um CNPJ consultando a ReceitaWS.

@@ -1,15 +1,18 @@
 ﻿using Asp.Versioning;
 using AutoMapper;
-using DesafioBackendAPI.Application.DTOs;
-using DesafioBackendAPI.Application.Services.Token;
-using DesafioBackendAPI.Domain.Model;
-using DesafioBackendAPI.Infrastructure;
+using ModeloBackEndAPI.Application.DTOs;
+using ModeloBackEndAPI.Application.Services.Token;
+using ModeloBackEndAPI.Domain.Model;
+using ModeloBackEndAPI.Infrastructure;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Cryptography;
 using System.Text;
 
-namespace DesafioBackendAPI.Controllers.v1
+namespace ModeloBackEndAPI.Controllers.v1
 {
+    /// <summary>
+    /// Controlador responsável pelas operações de <c>Usuario</c>.
+    /// </summary>
     [ApiController]
     [Route("api/v{version:apiVersion}/Usuario")]
     [ApiVersion("1.0")]
@@ -22,6 +25,9 @@ namespace DesafioBackendAPI.Controllers.v1
         private readonly ITokenService _tokenService;
         private readonly ILogger<UsuarioController> _logger;
 
+        /// <summary>
+        /// Inicializa uma nova instância de <c>UsuarioController</c>.
+        /// </summary>
         public UsuarioController(Contexto db, IUsuarioRepository repository, IMapper mapper, IConfiguration configuration, ILogger<UsuarioController> logger)
         {
             _db = db;
@@ -34,6 +40,9 @@ namespace DesafioBackendAPI.Controllers.v1
 
         #region CRUD
 
+        /// <summary>
+        /// Obtém os registros ou o recurso solicitado.
+        /// </summary>
         [HttpGet]
         public async Task<IActionResult> Get()
         {
@@ -58,6 +67,9 @@ namespace DesafioBackendAPI.Controllers.v1
             }
         }
 
+        /// <summary>
+        /// Obtém os registros ou o recurso solicitado.
+        /// </summary>
         [HttpGet("{email}")]
         public async Task<IActionResult> Get(string email)
         {
@@ -81,6 +93,9 @@ namespace DesafioBackendAPI.Controllers.v1
             }
         }
 
+        /// <summary>
+        /// Adiciona um novo registro.
+        /// </summary>
         [HttpPost]
         public async Task<IActionResult> Add([FromQuery] UsuarioDTO usuarioDTO)
         {
@@ -101,7 +116,7 @@ namespace DesafioBackendAPI.Controllers.v1
                     return BadRequest("Nome inválido.");
 
 
-                var usuarioExiste = _repository.UsuarioExisteAsync(usuarioDTO.Email);
+                var usuarioExiste = await _repository.UsuarioExisteAsync(usuarioDTO.Email).ConfigureAwait(false);
                 if (usuarioExiste != null)
                     return BadRequest("Usuário já existe.");
 
@@ -126,6 +141,9 @@ namespace DesafioBackendAPI.Controllers.v1
             }
         }
 
+        /// <summary>
+        /// Atualiza o registro informado.
+        /// </summary>
         [HttpPut]
         public async Task<IActionResult> Update([FromQuery] UsuarioDTO usuarioDTO)
         {
@@ -146,7 +164,7 @@ namespace DesafioBackendAPI.Controllers.v1
                 if (usuario == null)
                     return NotFound("Usuário não encontrado.");
 
-                _mapper.Map<Usuario>(usuarioDTO);
+                _mapper.Map(usuarioDTO, usuario);
                 usuario.DtAlteracao = DateTime.Now;
 
                 using (var hmac = new HMACSHA256())
@@ -166,6 +184,9 @@ namespace DesafioBackendAPI.Controllers.v1
             }
         }
 
+        /// <summary>
+        /// Exclui o registro indicado.
+        /// </summary>
         [HttpDelete("{email}")]
         public async Task<IActionResult> Delete(string email)
         {
@@ -187,6 +208,9 @@ namespace DesafioBackendAPI.Controllers.v1
             }
         }
 
+        /// <summary>
+        /// Valida as credenciais e gera um token JWT.
+        /// </summary>
         [HttpPost("Login")]
         public async Task<IActionResult> Login([FromQuery] UsuarioDTO usuarioDTO)
         {
@@ -205,6 +229,9 @@ namespace DesafioBackendAPI.Controllers.v1
                 var usuario = await _repository.UsuarioExisteExcluidoAsync(usuarioDTO.Email).ConfigureAwait(false);
                 if (usuario == null)
                     return BadRequest("Usuário inexistente ou excluído.");
+
+                if (usuario.SenhaSalt is null || usuario.SenhaHash is null)
+                    return BadRequest("Credenciais inválidas.");
 
                 var hash = new HMACSHA256(usuario.SenhaSalt);
                 var result = hash.ComputeHash(Encoding.UTF8.GetBytes(usuarioDTO.Senha));

@@ -1,11 +1,17 @@
 ﻿using AutoMapper;
-using DesafioBackendAPI.Application.DTOs;
-using DesafioBackendAPI.Domain.Model;
+using ModeloBackEndAPI.Application.DTOs;
+using ModeloBackEndAPI.Domain.Model;
 
-namespace DesafioBackendAPI.Application.Mapping
+namespace ModeloBackEndAPI.Application.Mapping
 {
+    /// <summary>
+    /// Configura os mapeamentos entre entidades e DTOs.
+    /// </summary>
     public class MappingDTO : Profile
     {
+        /// <summary>
+        /// Inicializa uma nova instância de <c>Mapping DTO</c>.
+        /// </summary>
         public MappingDTO()
         {
             CreateMap<Conta, ContaDTO>()

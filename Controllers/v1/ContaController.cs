@@ -1,15 +1,18 @@
 ﻿using Asp.Versioning;
 using AutoMapper;
-using DesafioBackendAPI.Application.DTOs;
-using DesafioBackendAPI.Application.Services;
-using DesafioBackendAPI.Domain.Model;
-using DesafioBackendAPI.Infrastructure;
+using ModeloBackEndAPI.Application.DTOs;
+using ModeloBackEndAPI.Application.Services;
+using ModeloBackEndAPI.Domain.Model;
+using ModeloBackEndAPI.Infrastructure;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using System.Security.Cryptography;
 
-namespace DesafioBackendAPI.Controllers.v1
+namespace ModeloBackEndAPI.Controllers.v1
 {
+    /// <summary>
+    /// Controlador responsável pelas operações de <c>Conta</c>.
+    /// </summary>
     [ApiController]
     [Route("api/v{version:apiVersion}/Conta")]
     [ApiVersion("1.0")]
@@ -22,6 +25,9 @@ namespace DesafioBackendAPI.Controllers.v1
         private readonly IBaseRepository _baseRepository;
 
 
+        /// <summary>
+        /// Inicializa uma nova instância de <c>ContaController</c>.
+        /// </summary>
         public ContaController(Contexto db, ILogger<ContaController> logger, IContaRepository repository, IMapper mapper, IBaseRepository baseRepository)
         {
             _db = db;
@@ -33,6 +39,9 @@ namespace DesafioBackendAPI.Controllers.v1
 
         #region CRUD
 
+        /// <summary>
+        /// Adiciona um novo registro.
+        /// </summary>
         [HttpPost, DisableRequestSizeLimit]
         public async Task<IActionResult> Add(ContaDTO contadto)
         {
@@ -92,6 +101,9 @@ namespace DesafioBackendAPI.Controllers.v1
             }
         }
 
+        /// <summary>
+        /// Obtém os registros ou o recurso solicitado.
+        /// </summary>
         [HttpGet]
         public async Task<IActionResult> Get()
         {
@@ -129,6 +141,9 @@ namespace DesafioBackendAPI.Controllers.v1
             }
         }
 
+        /// <summary>
+        /// Obtém os registros ou o recurso solicitado.
+        /// </summary>
         [HttpGet("{Id}")]
         public async Task<IActionResult> Get(int Id)
         {
@@ -163,6 +178,9 @@ namespace DesafioBackendAPI.Controllers.v1
             }
         }
 
+        /// <summary>
+        /// Recupera o arquivo associado ao nome informado.
+        /// </summary>
         [HttpGet("Download/{nome}")]
         public async Task<IActionResult> Download(string nome)
         {
@@ -171,8 +189,13 @@ namespace DesafioBackendAPI.Controllers.v1
                 _logger.LogInformation("Buscando arquivo por nome: " + nome);
 
                 var arquivo_nome = nome;
-                var local_arquivo = Path.Combine(Directory.GetCurrentDirectory(), "Armazenamento");
-                var local_arquivo_completo = Path.Combine(local_arquivo, arquivo_nome);
+                var diretorioBase = Path.GetFullPath(Path.Combine(Directory.GetCurrentDirectory(), "Armazenamento"));
+                var local_arquivo_completo = Path.GetFullPath(Path.Combine(diretorioBase, arquivo_nome));
+
+                if (!local_arquivo_completo.StartsWith(diretorioBase + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+                {
+                    return BadRequest("Nome de arquivo inválido.");
+                }
 
                 if (!System.IO.File.Exists(local_arquivo_completo))
                 {
@@ -192,6 +215,9 @@ namespace DesafioBackendAPI.Controllers.v1
             }
         }
 
+        /// <summary>
+        /// Atualiza o registro informado.
+        /// </summary>
         [HttpPut("{Id}")]
         public async Task<IActionResult> Update(int Id, ContaDTO contadto)
         {
@@ -208,12 +234,16 @@ namespace DesafioBackendAPI.Controllers.v1
                 if (contadto.Cnpj.Length != 14)
                     return BadRequest("CNPJ deve conter 14 números.");
 
-                var situacao = await Task.Run(() => _baseRepository.GetSituacaoAsync(contadto.Id.Value)).ConfigureAwait(false);
+                var situacao = await Task.Run(() => _baseRepository.GetSituacaoAsync(Id)).ConfigureAwait(false);
                 if (!situacao)
                     return BadRequest("Conta inativa e/ou excluída!");
 
                 if (RetornaReceita.RetornaNome(contadto.Cnpj).Result == null)
                     return BadRequest("CNPJ inválido.");
+
+                var contaExistente = await _repository.GetAsync(Id).ConfigureAwait(false);
+                if (contaExistente == null)
+                    return NotFound("Conta inexistente.");
 
                 var DtInclusao = await _baseRepository.GetDtInclusaoAsync(Id).ConfigureAwait(false);
 
@@ -221,22 +251,23 @@ namespace DesafioBackendAPI.Controllers.v1
                 var complemento_nome = RandomNumberGenerator.GetInt32(100000000, int.MaxValue);
                 var local_arquivo = Path.Combine("Armazenamento", conta_agencia_numero + complemento_nome + System.IO.Path.GetExtension(contadto.Arquivo.FileName));
 
-                var _conta = _mapper.Map<Conta>(contadto);
+                _mapper.Map(contadto, contaExistente);
 
                 //Campos não mapeados
-                _conta.DtInclusao = DtInclusao;
-                _conta.DtAlteracao = DateTime.Now;
-                _conta.LocalArquivo = local_arquivo;
-                _conta.Saldo = await Task.Run(() => _baseRepository.GetSaldoAsync(contadto.Id.Value)).ConfigureAwait(false);
+                contaExistente.Id = Id;
+                contaExistente.DtInclusao = DtInclusao;
+                contaExistente.DtAlteracao = DateTime.Now;
+                contaExistente.LocalArquivo = local_arquivo;
+                contaExistente.Saldo = await Task.Run(() => _baseRepository.GetSaldoAsync(Id)).ConfigureAwait(false);
 
 
                 //Adiciona o registro DTO convertido no modelo, no banco de dados.
-                await Task.Run(() => _repository.UpdateAsync(_conta)).ConfigureAwait(false);
+                await Task.Run(() => _repository.UpdateAsync(contaExistente)).ConfigureAwait(false);
 
                 //Salvar arqquivo em disco só depois de salvar registro no banco de dados.
-                RetornaArquivo.SalvarArquivoDisco(conta_agencia_numero, local_arquivo, contadto);
+                await RetornaArquivo.SalvarArquivoDisco(conta_agencia_numero, local_arquivo, contadto).ConfigureAwait(false);
 
-                _logger.LogInformation("Registro id: " + _conta.Id + " alterado!");
+                _logger.LogInformation("Registro id: " + contaExistente.Id + " alterado!");
 
                 return Ok();
             }
@@ -247,6 +278,9 @@ namespace DesafioBackendAPI.Controllers.v1
             }
         }
 
+        /// <summary>
+        /// Exclui o registro indicado.
+        /// </summary>
         [HttpDelete("{id}")]
         public async Task<IActionResult> Delete(int id)
         {

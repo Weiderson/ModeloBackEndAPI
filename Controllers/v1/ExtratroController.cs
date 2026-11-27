@@ -1,13 +1,16 @@
 ﻿using Asp.Versioning;
 using AutoMapper;
-using DesafioBackendAPI.Application.DTOs;
-using DesafioBackendAPI.Application.Enums;
-using DesafioBackendAPI.Domain.Model;
-using DesafioBackendAPI.Infrastructure;
+using ModeloBackEndAPI.Application.DTOs;
+using ModeloBackEndAPI.Application.Enums;
+using ModeloBackEndAPI.Domain.Model;
+using ModeloBackEndAPI.Infrastructure;
 using Microsoft.AspNetCore.Mvc;
 
-namespace DesafioBackendAPI.Controllers.v1
+namespace ModeloBackEndAPI.Controllers.v1
 {
+    /// <summary>
+    /// Controlador responsável pelas operações de <c>Extratro</c>.
+    /// </summary>
     [ApiController]
     [Route("api/v{version:apiVersion}/Extrato")]
     [ApiVersion("1.0")]
@@ -19,6 +22,9 @@ namespace DesafioBackendAPI.Controllers.v1
         private readonly IMapper _mapper;
         private readonly IBaseRepository _baseRepository;
 
+        /// <summary>
+        /// Inicializa uma nova instância de <c>ExtratroController</c>.
+        /// </summary>
         public ExtratroController(Contexto db, ILogger<ContaController> logger, IExtratroRepository repository, IMapper mapper, IBaseRepository baseRepository)
         {
             _db = db;
@@ -30,6 +36,9 @@ namespace DesafioBackendAPI.Controllers.v1
 
         #region SALDO E EXTRATO
 
+        /// <summary>
+        /// Obtém o saldo atual da conta.
+        /// </summary>
         [HttpGet("Saldo/{ContaId}")]
         public async Task<IActionResult> GetSaldo(int ContaId)
         {
@@ -58,6 +67,9 @@ namespace DesafioBackendAPI.Controllers.v1
         }
 
 
+        /// <summary>
+        /// Obtém o extrato da conta para o período solicitado.
+        /// </summary>
         [HttpGet("Extrato")]
         public async Task<IActionResult> GetExtrato([FromQuery] ExtratoDTO ExtratoDTO)
         {
@@ -72,15 +84,16 @@ namespace DesafioBackendAPI.Controllers.v1
                 if (!situacao)
                     return BadRequest("Conta inativa e/ou excluída!");
 
-                if (!System.Enum.TryParse(typeof(ExtratoPeriodo), ExtratoDTO.ExtratoPeriodo.ToString(), true, out var parsedPeriodo))
-                    return BadRequest("Período informado: " + parsedPeriodo + " inválido. Os valores válidos são: " + string.Join(", ", (ExtratoPeriodo[])System.Enum.GetValues(typeof(ExtratoPeriodo))) + ".");
+                if (!System.Enum.IsDefined(ExtratoDTO.ExtratoPeriodo))
+                    return BadRequest("Período informado: " + ExtratoDTO.ExtratoPeriodo + " inválido. Os valores válidos são: " + string.Join(", ", (ExtratoPeriodo[])System.Enum.GetValues(typeof(ExtratoPeriodo))) + ".");
 
                 int periodo = ExtratoDTO.ExtratoPeriodo switch
                 {
                     ExtratoPeriodo.Dia => 1,
                     ExtratoPeriodo.Semana => 7,
                     ExtratoPeriodo.Mes => 30,
-                    ExtratoPeriodo.Ano => 365
+                    ExtratoPeriodo.Ano => 365,
+                    _ => throw new ArgumentOutOfRangeException(nameof(ExtratoDTO.ExtratoPeriodo))
                 };
 
                 var _extrato = await Task.Run(() => _repository.GetExtratoAsync(ExtratoDTO.ContaId, periodo)).ConfigureAwait(false);

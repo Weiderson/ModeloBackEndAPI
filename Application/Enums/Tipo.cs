@@ -1,4 +1,4 @@
-﻿namespace DesafioBackendAPI.Application.Enums
+﻿namespace ModeloBackEndAPI.Application.Enums
 {
     public enum Tipo
     {

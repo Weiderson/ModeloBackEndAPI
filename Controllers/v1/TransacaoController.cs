@@ -1,14 +1,17 @@
 ﻿using Asp.Versioning;
 using AutoMapper;
-using DesafioBackendAPI.Application.DTOs;
-using DesafioBackendAPI.Application.Enums;
-using DesafioBackendAPI.Domain.Model;
-using DesafioBackendAPI.Infrastructure;
-using DesafioBackendAPI.Infrastructure.Repositories;
+using ModeloBackEndAPI.Application.DTOs;
+using ModeloBackEndAPI.Application.Enums;
+using ModeloBackEndAPI.Domain.Model;
+using ModeloBackEndAPI.Infrastructure;
+using ModeloBackEndAPI.Infrastructure.Repositories;
 using Microsoft.AspNetCore.Mvc;
 
-namespace DesafioBackendAPI.Controllers.v1
+namespace ModeloBackEndAPI.Controllers.v1
 {
+    /// <summary>
+    /// Controlador responsável pelas operações de <c>Transacao</c>.
+    /// </summary>
     [ApiController]
     [Route("api/v{version:apiVersion}/Transacao")]
     [ApiVersion("1.0")]
@@ -21,6 +24,9 @@ namespace DesafioBackendAPI.Controllers.v1
         private readonly IUnitOfWork _transaction;
         private readonly IBaseRepository _baseRepository;
 
+        /// <summary>
+        /// Inicializa uma nova instância de <c>TransacaoController</c>.
+        /// </summary>
         public TransacaoController(Contexto db, ITransacaoRepository repository, ILogger<TransacaoController> logger, IMapper mapper, IUnitOfWork transaction, IBaseRepository baseRepository)
         {
             _db = db;
@@ -33,6 +39,9 @@ namespace DesafioBackendAPI.Controllers.v1
 
         #region TRANSAÇÕES
 
+        /// <summary>
+        /// Adiciona um novo registro.
+        /// </summary>
         [HttpPost]
         public async Task<IActionResult> Add([FromQuery] TransacaoDTO transacao_dto)
         {
@@ -169,6 +178,9 @@ namespace DesafioBackendAPI.Controllers.v1
             }
         }
 
+        /// <summary>
+        /// Obtém os registros ou o recurso solicitado.
+        /// </summary>
         [HttpGet]
         public async Task<IActionResult> Get()
         {
@@ -194,6 +206,9 @@ namespace DesafioBackendAPI.Controllers.v1
             }
         }
 
+        /// <summary>
+        /// Obtém os registros ou o recurso solicitado.
+        /// </summary>
         [HttpGet("{id}")]
         public async Task<IActionResult> Get(int id)
         {

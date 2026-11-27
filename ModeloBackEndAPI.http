@@ -1,0 +1,6 @@
+@ModeloBackEndAPI_HostAddress = http://localhost:5152
+
+GET {{ModeloBackEndAPI_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

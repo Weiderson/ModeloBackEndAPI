@@ -1,15 +1,21 @@
 ﻿using AutoMapper;
-using DesafioBackendAPI.Domain.Model;
+using ModeloBackEndAPI.Domain.Model;
 using Microsoft.EntityFrameworkCore;
 
-namespace DesafioBackendAPI.Infrastructure.Repositories
+namespace ModeloBackEndAPI.Infrastructure.Repositories
 {
+    /// <summary>
+    /// Implementa as operações de persistência de <c>Usuario</c>.
+    /// </summary>
     public class UsuarioRepository : IUsuarioRepository
     {
         private readonly Contexto _db;
         private readonly IMapper _mapper;
         private readonly IHttpContextAccessor _httpContextAccessor;
 
+        /// <summary>
+        /// Inicializa uma nova instância de <c>Usuario Repository</c>.
+        /// </summary>
         public UsuarioRepository(Contexto db, IMapper mapper, IHttpContextAccessor httpContextAccessor)
         {
             _db = db;
@@ -17,29 +23,44 @@ namespace DesafioBackendAPI.Infrastructure.Repositories
             _httpContextAccessor = httpContextAccessor;
         }
 
-        public async Task<Usuario> GetAsync(string email)
+        /// <summary>
+        /// Obtém o usuário associado ao endereço de e-mail informado.
+        /// </summary>
+        public async Task<Usuario?> GetAsync(string email)
         {
             var usuario = await UsuarioExisteAsync(email).ConfigureAwait(false);
             return usuario;
         }
+        /// <summary>
+        /// Obtém os registros de forma assíncrona.
+        /// </summary>
         public async Task<IEnumerable<Usuario>> GetAsync()
         {
             var usuarios = await _db.Usuario.Where(u => u.DtExclusao == null).ToListAsync().ConfigureAwait(false);
             return usuarios;
         }
 
+        /// <summary>
+        /// Adiciona o registro informado de forma assíncrona.
+        /// </summary>
         public async Task AddAsync(Usuario usuario)
         {
             _db.Usuario.Add(usuario);
             await _db.SaveChangesAsync().ConfigureAwait(false);
         }
 
+        /// <summary>
+        /// Atualiza o registro informado de forma assíncrona.
+        /// </summary>
         public async Task UpdateAsync(Usuario usuario)
         {
             _db.Update(usuario);
             await _db.SaveChangesAsync().ConfigureAwait(false);
         }
 
+        /// <summary>
+        /// Exclui ou marca o registro como excluído, conforme a versão da API.
+        /// </summary>
         public async Task DeleteAsync(Usuario usuario)
         {
             var httpContext = _httpContextAccessor.HttpContext;
@@ -59,13 +80,19 @@ namespace DesafioBackendAPI.Infrastructure.Repositories
             await _db.SaveChangesAsync().ConfigureAwait(false);
         }
 
-        public async Task<Usuario> UsuarioExisteAsync(string email)
+        /// <summary>
+        /// Verifica se existe um usuário com o e-mail informado.
+        /// </summary>
+        public async Task<Usuario?> UsuarioExisteAsync(string email)
         {
             var usuario = await _db.Usuario.FirstOrDefaultAsync(u => u.Email == email).ConfigureAwait(false);
             return usuario;
         }
 
-        public async Task<Usuario> UsuarioExisteExcluidoAsync(string email)
+        /// <summary>
+        /// Localiza um usuário ativo pelo e-mail informado.
+        /// </summary>
+        public async Task<Usuario?> UsuarioExisteExcluidoAsync(string email)
         {
             var usuario = await _db.Usuario.FirstOrDefaultAsync(u => u.Email == email && u.DtExclusao == null).ConfigureAwait(false);
             return usuario;

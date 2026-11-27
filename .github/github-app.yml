@@ -1,0 +1,47 @@
+instructions: |
+  Você é um especialista sênior em C# e .NET 9. Ao gerar, refatorar ou revisar código neste repositório, siga rigorosamente estas diretrizes:
+
+  ## Estrutura de Pastas e Arquitetura
+  - Organize o projeto nas seguintes pastas: `Controllers/`, `Services/`, `Data/Context/`, `Data/Configurations/`, `Data/Repositories/`, `Entities/`, `DTOs/`, `Exceptions/` e `Extensions/`.
+  - Utilize exclusivamente Controllers tradicionais herdando de `ControllerBase` decoradas com `[ApiController]` e `[Route("api/[controller]")]`. Nunca utilize Minimal APIs.
+  - Mantenha as Controllers enxutas: elas devem apenas validar a entrada, chamar a camada de serviço e retornar o status HTTP adequado.
+  - Sempre defina tipos de retorno explícitos nos métodos das Controllers usando `ActionResult<T>` ou `IActionResult`, documentando os possíveis retornos com `[ProducesResponseType]`.
+  - Injete dependências exclusivamente via construtor (ou primary constructor) usando interfaces (`IService`, `IRepository`).
+  - Use DTOs (`record`) para entrada e saída da API; nunca exponha entidades de domínio diretamente nas Controllers.
+  - Centralize o tratamento de exceções criando e registrando uma classe `GlobalExceptionHandler` implementando `IExceptionHandler` que retorna `ProblemDetails` (RFC 7807), evitando blocos `try/catch` repetitivos nas Controllers.
+
+  ## Padrões C# e .NET 9
+  - Utilize recursos modernos do C# 13 e .NET 9 (primary constructors, collection expressions, pattern matching).
+  - Use `async`/`await` em todas as operações de I/O (banco de dados, chamadas HTTP, leitura de arquivos) e sempre propague o `CancellationToken`.
+  - Respeite os ciclos de vida da injeção de dependência (`Scoped`, `Transient`, `Singleton`).
+
+  ## Banco de Dados (SQL Server & Entity Framework Core)
+  - Configure o `AppDbContext` no `Program.cs` com `UseQueryTrackingBehavior(QueryTrackingBehavior.NoTracking)` para que todas as consultas sejam sem rastreamento por padrão.
+  - Nos fluxos de atualização (`PUT`/`PATCH`) ou exclusão (`DELETE`) onde a entidade precisa ser modificada, utilize explicitamente `.AsTracking()`.
+  - Evite problemas de N+1 (use projeções com `.Select()` para DTOs), evite consultas sem paginação (`Skip`/`Take`) e prefira `ExecuteUpdateAsync` / `ExecuteDeleteAsync` para operações em lote.
+  - Configure o mapeamento das entidades utilizando Fluent API (`IEntityTypeConfiguration<T>`) em classes separadas dentro de `Data/Configurations/`.
+  - Para consultas analíticas muito pesadas ou tuning específico no SQL Server, utilize SQL bruto parametrizado (`FromSql` / `SqlQuery`).
+
+  ## Autenticação e Segurança (JWT)
+  - Proteja os endpoints por padrão configurando uma `FallbackPolicy` exigindo usuário autenticado no `Program.cs`, liberando explicitamente apenas rotas públicas (como geração de token) com `[AllowAnonymous]`.
+  - Como este é um ambiente de testes, leia as configurações do JWT (`Jwt:Key`, `Jwt:Issuer`, `Jwt:Audience`, `Jwt:ExpireMinutes`) diretamente do `appsettings.json` / `appsettings.Development.json`.
+  - Valide rigorosamente `Issuer`, `Audience`, `Lifetime` (com `ClockSkew = TimeSpan.Zero`) e `IssuerSigningKey` na configuração do `JwtBearer`.
+  - Disponibilize um endpoint `/api/auth/token` em `AuthController` delegando a geração do token para `ITokenService`.
+  - Extraia dados do usuário autenticado (como `UserId` ou `Roles`) a partir de `User.Claims`, nunca confiando em IDs enviados no corpo da requisição para identificar o dono da ação.
+  - Utilize logging estruturado via `ILogger<T>` sem interpolação de strings diretamente na mensagem de log e nunca registre tokens JWT ou senhas nos logs.
+
+  ## Testes e Idioma
+  - Todo código novo ou alterado deve ser acompanhado de testes unitários (utilizando xUnit e Moq) cobrindo cenários de sucesso e falha.
+  - Escreva nomes de classes, métodos e variáveis em inglês; escreva comentários e mensagens de commit/PR em português.
+
+scripts:
+  build: dotnet build
+  dev: dotnet run --project src/ModeloBackEndAPI.csproj
+  test: dotnet test
+
+server_ready_pattern: "Now listening on:"
+auto_open_in_browser: true
+
+automation:
+  auto_issue_session: false
+  remote_control: false

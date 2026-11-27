@@ -1,6 +1,6 @@
-﻿using DesafioBackendAPI.Application.DTOs;
+﻿using ModeloBackEndAPI.Application.DTOs;
 
-namespace DesafioBackendAPI.Application.Services
+namespace ModeloBackEndAPI.Application.Services
 {
     /// <summary>
     /// Classe responsável por operações relacionadas a arquivos.
@@ -10,8 +10,8 @@ namespace DesafioBackendAPI.Application.Services
         /// <summary>
         /// Salva um arquivo no disco, associando-o a uma conta específica.
         /// </summary>
-        /// <param name="numero">Número da conta.</param>
-        /// <param name="agencia">Agência da conta.</param>
+        /// <param name="conta_agencia_numero">Identificador usado para nomear os arquivos da conta.</param>
+        /// <param name="local_arquivo">Caminho onde o arquivo será salvo.</param>
         /// <param name="contaDto">Objeto DTO contendo informações da conta e o arquivo.</param>
         public static async Task SalvarArquivoDisco(string conta_agencia_numero, string local_arquivo, ContaDTO contaDto)
         {
@@ -27,10 +27,10 @@ namespace DesafioBackendAPI.Application.Services
         }
 
         /// <summary>
-        /// Lê o conteúdo de um arquivo e retorna como uma string.
+        /// Lê o conteúdo de um arquivo.
         /// </summary>
-        /// <param name="filePath">Caminho do arquivo.</param>
-        /// <returns>Conteúdo do arquivo como string.</returns>
+        /// <param name="local_arquivo_completo">Caminho completo do arquivo.</param>
+        /// <returns>Conteúdo do arquivo em bytes.</returns>
         public static async Task<Byte[]> RecuperarArquivoDisco(string local_arquivo_completo)
         {
             return await System.IO.File.ReadAllBytesAsync(local_arquivo_completo);

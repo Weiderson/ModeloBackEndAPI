@@ -1,17 +1,26 @@
-﻿using DesafioBackendAPI.Domain.Model;
+﻿using ModeloBackEndAPI.Domain.Model;
 using Microsoft.EntityFrameworkCore;
 
-namespace DesafioBackendAPI.Infrastructure.Repositories
+namespace ModeloBackEndAPI.Infrastructure.Repositories
 {
+    /// <summary>
+    /// Implementa as operações de persistência de <c>Base</c>.
+    /// </summary>
     public class BaseRepository : IBaseRepository
     {
         private readonly Contexto _db;
 
+        /// <summary>
+        /// Inicializa uma nova instância de <c>Base Repository</c>.
+        /// </summary>
         public BaseRepository(Contexto db)
         {
             _db = db ?? throw new ArgumentNullException(nameof(db));
         }
 
+        /// <summary>
+        /// Verifica se a conta está ativa e não excluída.
+        /// </summary>
         public async Task<bool> GetSituacaoAsync(int contaID)
         {
             var conta = await _db.Conta.FirstOrDefaultAsync(d => d.Id == contaID).ConfigureAwait(false);
@@ -24,6 +33,9 @@ namespace DesafioBackendAPI.Infrastructure.Repositories
             return situacao;
         }
 
+        /// <summary>
+        /// Obtém o saldo atual da conta de forma assíncrona.
+        /// </summary>
         public async Task<decimal> GetSaldoAsync(int id)
         {
             var conta = await _db.Conta.FirstOrDefaultAsync(s => s.Id == id).ConfigureAwait(false);
@@ -35,6 +47,9 @@ namespace DesafioBackendAPI.Infrastructure.Repositories
             return conta.Saldo;
         }
 
+        /// <summary>
+        /// Obtém a data de inclusão da conta.
+        /// </summary>
         public async Task<DateTime> GetDtInclusaoAsync(int id)
         {
             var conta = await _db.Conta.FirstOrDefaultAsync(s => s.Id == id).ConfigureAwait(false);

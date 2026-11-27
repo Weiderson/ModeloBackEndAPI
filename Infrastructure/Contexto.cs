@@ -1,26 +1,41 @@
-﻿using DesafioBackendAPI.Domain.Model;
+﻿using ModeloBackEndAPI.Domain.Model;
 using Microsoft.EntityFrameworkCore;
 
-namespace DesafioBackendAPI.Infrastructure
+namespace ModeloBackEndAPI.Infrastructure
 {
+    /// <summary>
+    /// Representa o contexto de acesso aos dados da aplicação.
+    /// </summary>
     public partial class Contexto : DbContext
     {
         private readonly IConfiguration _configuration;
         private readonly string _connectionString;
 
-        public Contexto(IConfiguration configuratation)
+        /// <summary>
+        /// Inicializa uma nova instância de <c>Contexto</c>.
+        /// </summary>
+        public Contexto(DbContextOptions<Contexto> options, IConfiguration configuratation)
+            : base(options)
         {
             _configuration = configuratation;
-            _connectionString = _configuration.GetConnectionString("DefaultConnection");
+            _connectionString = _configuration.GetConnectionString("DefaultConnection") ?? string.Empty;
         }
 
+        /// <summary>
+        /// Configura o provedor e as opções do contexto do Entity Framework.
+        /// </summary>
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
         {
-            optionsBuilder.UseMySQL(_connectionString)
-                .EnableSensitiveDataLogging()
+            if (!optionsBuilder.IsConfigured && !string.IsNullOrWhiteSpace(_connectionString))
+            {
+                optionsBuilder.UseMySQL(_connectionString)
                     .EnableDetailedErrors();
+            }
         }
 
+        /// <summary>
+        /// Configura o modelo de entidades do Entity Framework.
+        /// </summary>
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             modelBuilder.Entity<Conta>(entity =>
@@ -47,9 +62,18 @@ namespace DesafioBackendAPI.Infrastructure
             OnModelCreatingPartial(modelBuilder);
         }
 
+        /// <summary>
+        /// Conjunto de contas armazenadas no contexto.
+        /// </summary>
         public virtual DbSet<Conta> Conta { get; set; }
+        /// <summary>
+        /// Conjunto de transações armazenadas no contexto.
+        /// </summary>
         public virtual DbSet<Transacao> Transacao { get; set; }
 
+        /// <summary>
+        /// Conjunto de usuários armazenados no contexto.
+        /// </summary>
         public virtual DbSet<Usuario> Usuario { get; set; }
 
         partial void OnModelCreatingPartial(ModelBuilder modelBuilder);

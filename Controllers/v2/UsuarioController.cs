@@ -1,16 +1,19 @@
 ﻿using Asp.Versioning;
 using AutoMapper;
-using DesafioBackendAPI.Application.DTOs;
-using DesafioBackendAPI.Application.Services.Token;
-using DesafioBackendAPI.Domain.Model;
-using DesafioBackendAPI.Infrastructure;
+using ModeloBackEndAPI.Application.DTOs;
+using ModeloBackEndAPI.Application.Services.Token;
+using ModeloBackEndAPI.Domain.Model;
+using ModeloBackEndAPI.Infrastructure;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Cryptography;
 using System.Text;
 
-namespace DesafioBackendAPI.Controllers.v2
+namespace ModeloBackEndAPI.Controllers.v2
 {
+    /// <summary>
+    /// Controlador responsável pelas operações de <c>Usuario</c>.
+    /// </summary>
     [ApiController]
     [Route("api/v{version:apiVersion}/Usuario")]
     [ApiVersion("2.0")]
@@ -23,6 +26,9 @@ namespace DesafioBackendAPI.Controllers.v2
         private readonly ITokenService _tokenService;
         private readonly ILogger<UsuarioController> _logger;
 
+        /// <summary>
+        /// Inicializa uma nova instância de <c>UsuarioController</c>.
+        /// </summary>
         public UsuarioController(Contexto db, IUsuarioRepository repository, IMapper mapper, IConfiguration configuration, ILogger<UsuarioController> logger)
         {
             _db = db;
@@ -33,6 +39,9 @@ namespace DesafioBackendAPI.Controllers.v2
             _logger = logger;
         }
 
+        /// <summary>
+        /// Obtém os registros ou o recurso solicitado.
+        /// </summary>
         [HttpGet("{email}")]
         public async Task<IActionResult> Get(string email)
         {
@@ -40,11 +49,11 @@ namespace DesafioBackendAPI.Controllers.v2
             {
                 _logger.LogInformation("Buscando registro...");
 
-                var usuario = await Task.FromResult(_repository.GetAsync(email));
+                var usuario = await _repository.GetAsync(email).ConfigureAwait(false);
                 if (usuario == null)
                     return NotFound("Usuário não encontrado.");
 
-                var usuarioDTO = _mapper.Map<IEnumerable<ContaDTO>>(usuario);
+                var usuarioDTO = _mapper.Map<UsuarioDTO>(usuario);
 
                 _logger.LogInformation("Registro retornado...");
                 return Ok(usuarioDTO);
@@ -56,6 +65,9 @@ namespace DesafioBackendAPI.Controllers.v2
             }
         }
 
+        /// <summary>
+        /// Exclui o registro indicado.
+        /// </summary>
         [Authorize]
         [HttpDelete("{email}")]
         public async Task<IActionResult> Delete(string email)
@@ -78,6 +90,9 @@ namespace DesafioBackendAPI.Controllers.v2
             }
         }
 
+        /// <summary>
+        /// Valida as credenciais e gera um token JWT.
+        /// </summary>
         [HttpPost("Login")]
         public async Task<IActionResult> Login([FromQuery] UsuarioDTO usuarioDTO)
         {
@@ -97,6 +112,9 @@ namespace DesafioBackendAPI.Controllers.v2
                 var usuario = await _repository.UsuarioExisteExcluidoAsync(usuarioDTO.Email).ConfigureAwait(false);
                 if (usuario == null)
                     return BadRequest("Usuário inexistente ou excluído.");
+
+                if (usuario.SenhaSalt is null || usuario.SenhaHash is null)
+                    return BadRequest("Credenciais inválidas.");
 
                 var hash = new HMACSHA256(usuario.SenhaSalt);
                 var result = hash.ComputeHash(Encoding.UTF8.GetBytes(usuarioDTO.Senha));
