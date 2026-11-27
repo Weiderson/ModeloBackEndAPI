@@ -1,6 +1,6 @@
 ﻿using DesafioBackendAPI.Domain.Model;
 
-namespace DesafioBackendAPI.Application.Services.Token
+namespace DesafioBackendAPI.Application.Interfaces
 {
     public interface ITokenService
     {

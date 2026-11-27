@@ -1,47 +1,55 @@
-﻿using Asp.Versioning;
+using Asp.Versioning;
 using AutoMapper;
 using DesafioBackendAPI.Application.DTOs;
+using DesafioBackendAPI.Application.Interfaces;
 using DesafioBackendAPI.Application.Services;
 using DesafioBackendAPI.Domain.Model;
-using DesafioBackendAPI.Infrastructure;
+using DesafioBackendAPI.Domain.Repositories;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 using System.Security.Cryptography;
 
 namespace DesafioBackendAPI.Controllers.v1
 {
     [ApiController]
+    [AllowAnonymous]
     [Route("api/v{version:apiVersion}/Conta")]
     [ApiVersion("1.0")]
     public class ContaController : ControllerBase
     {
-        private readonly Contexto _db;
         private readonly IContaRepository _repository;
         private readonly ILogger<ContaController> _logger;
         private readonly IMapper _mapper;
         private readonly IBaseRepository _baseRepository;
+        private readonly IRetornaReceita _retornaReceita;
 
-
-        public ContaController(Contexto db, ILogger<ContaController> logger, IContaRepository repository, IMapper mapper, IBaseRepository baseRepository)
+        public ContaController(
+            ILogger<ContaController> logger,
+            IContaRepository repository,
+            IMapper mapper,
+            IBaseRepository baseRepository,
+            IRetornaReceita retornaReceita)
         {
-            _db = db;
             _repository = repository;
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             _mapper = mapper;
             _baseRepository = baseRepository;
+            _retornaReceita = retornaReceita;
         }
 
         #region CRUD
 
         [HttpPost, DisableRequestSizeLimit]
-        public async Task<IActionResult> Add(ContaDTO contadto)
+        public async Task<IActionResult> Add(ContaDTO contadto, CancellationToken cancellationToken)
         {
-            try
             {
                 _logger.LogInformation("Adicionando registro...");
 
                 if (contadto == null)
                     return BadRequest("Dados não podem ser nulos.");
+
+                if (contadto.Arquivo == null || contadto.Arquivo.Length == 0)
+                    return BadRequest("Arquivo da conta não informado.");
 
                 if (!FormataString.SomenteNumeros(contadto.Cnpj))
                     return BadRequest("CNPJ deve conter apenas números.");
@@ -49,11 +57,13 @@ namespace DesafioBackendAPI.Controllers.v1
                 if (contadto.Cnpj.Length != 14)
                     return BadRequest("CNPJ deve conter 14 números.");
 
-                var _conta = await _db.Conta.FirstOrDefaultAsync(c => c.Agencia.Trim().Equals(contadto.Agencia.Trim()) && c.Numero.Trim().Equals(contadto.Numero.Trim())).ConfigureAwait(false);
+                var _conta = await _repository
+                    .GetByAgencyAndNumberAsync(contadto.Agencia, contadto.Numero, cancellationToken)
+                    .ConfigureAwait(false);
                 if (_conta != null)
                     return BadRequest("Conta existente.");
 
-                if (RetornaReceita.RetornaNome(contadto.Cnpj).Result == null)
+                if (await _retornaReceita.RetornaNome(contadto.Cnpj, cancellationToken).ConfigureAwait(false) == null)
                     return BadRequest("CNPJ inválido.");
 
                 var conta_agencia_numero = "_" + contadto.Numero + contadto.Agencia;
@@ -67,46 +77,38 @@ namespace DesafioBackendAPI.Controllers.v1
                 conta.DtInclusao = DateTime.Now;
                 conta.Id = null;
 
-                await Task.Run(() => _repository.AddAsync(conta)); //Adiciona o registro DTO convertido no modelo, no banco de dados.
-
-                await RetornaArquivo.SalvarArquivoDisco(conta_agencia_numero, local_arquivo, contadto);
-
-                var apagar_arquivos = Directory.GetFiles("Armazenamento", "conta_agencia_numero*");
-                foreach (var file in apagar_arquivos)
+                await RetornaArquivo.SalvarArquivoDisco(local_arquivo, contadto, cancellationToken).ConfigureAwait(false);
+                try
                 {
-                    System.IO.File.Delete(file);
+                    await _repository.AddAsync(conta, cancellationToken).ConfigureAwait(false);
                 }
-                using (Stream fileStream = new FileStream(local_arquivo, FileMode.Create))
+                catch
                 {
-                    await contadto.Arquivo.CopyToAsync(fileStream).ConfigureAwait(false);
+                    RetornaArquivo.ExcluirArquivoDisco(local_arquivo);
+                    throw;
                 }
 
                 _logger.LogInformation("Registro id: " + conta.Id + " adicionado!");
 
                 return Ok();
             }
-            catch (Exception ex)
-            {
-                _logger.Log(LogLevel.Error, "Ocorreu um erro na requisição: " + ex.Message);
-                return NotFound(ex.Message);
-            }
+
         }
 
         [HttpGet]
-        public async Task<IActionResult> Get()
+        public async Task<IActionResult> Get(CancellationToken cancellationToken)
         {
-            try
             {
                 _logger.LogInformation("Buscando registros...");
 
-                var contas = await Task.Run(() => _repository.GetAsync()).ConfigureAwait(false);
+                var contas = await _repository.GetAsync(cancellationToken).ConfigureAwait(false);
 
                 if (!contas.Any())
                     return NotFound("Lista de contas é nula ou vazia.");
 
                 foreach (var conta in contas)
                 {
-                    var nome = RetornaReceita.RetornaNome(conta.Cnpj).Result;
+                    var nome = await _retornaReceita.RetornaNome(conta.Cnpj, cancellationToken).ConfigureAwait(false);
 
                     if (nome == "TooManyRequests")
                         conta.NomeCompleto = "Número de requisições acima do limite permitido em ReceitaWS (HTTP 429).";
@@ -122,26 +124,21 @@ namespace DesafioBackendAPI.Controllers.v1
 
                 return Ok(contasDTO); //Retorna solicitação com DTOs
             }
-            catch (Exception ex)
-            {
-                _logger.Log(LogLevel.Error, "Ocorreu um erro na requisição: " + ex.Message);
-                return NotFound(ex.Message);
-            }
+
         }
 
         [HttpGet("{Id}")]
-        public async Task<IActionResult> Get(int Id)
+        public async Task<IActionResult> Get(int Id, CancellationToken cancellationToken)
         {
-            try
             {
                 _logger.LogInformation("Buscando registro...");
 
-                var _conta = await Task.Run(() => _repository.GetAsync(Id));
+                var _conta = await _repository.GetAsync(Id, cancellationToken).ConfigureAwait(false);
 
                 if (_conta == null)
                     return NotFound("Conta inexistente.");
 
-                var nome = RetornaReceita.RetornaNome(_conta.Cnpj).Result;
+                var nome = await _retornaReceita.RetornaNome(_conta.Cnpj, cancellationToken).ConfigureAwait(false);
 
                 if (nome == "TooManyRequests")
                     _conta.NomeCompleto = "Número de requisições acima do limite permitido em ReceitaWS (HTTP 429).";
@@ -156,17 +153,12 @@ namespace DesafioBackendAPI.Controllers.v1
 
                 return Ok(_contaDTO); //Retorna solicitação com DTOs
             }
-            catch (Exception ex)
-            {
-                _logger.Log(LogLevel.Error, "Ocorreu um erro na requisição: " + ex.Message);
-                return NotFound(ex.Message);
-            }
+
         }
 
         [HttpGet("Download/{nome}")]
-        public async Task<IActionResult> Download(string nome)
+        public async Task<IActionResult> Download(string nome, CancellationToken cancellationToken)
         {
-            try
             {
                 _logger.LogInformation("Buscando arquivo por nome: " + nome);
 
@@ -179,23 +171,18 @@ namespace DesafioBackendAPI.Controllers.v1
                     return BadRequest("Arquivo informado inexistente");
                 }
 
-                var fileBytes = await RetornaArquivo.RecuperarArquivoDisco(local_arquivo_completo).ConfigureAwait(false);
+                var fileBytes = await RetornaArquivo.RecuperarArquivoDisco(local_arquivo_completo, cancellationToken).ConfigureAwait(false);
 
                 _logger.LogInformation("Download do arquivo foi efetuado");
 
                 return File(fileBytes, "application/octet-stream", arquivo_nome);
             }
-            catch (Exception ex)
-            {
-                _logger.LogError("Ocorreu um erro na requisição: " + ex.Message);
-                return NotFound(ex.Message);
-            }
+
         }
 
         [HttpPut("{Id}")]
-        public async Task<IActionResult> Update(int Id, ContaDTO contadto)
+        public async Task<IActionResult> Update(int Id, ContaDTO contadto, CancellationToken cancellationToken)
         {
-            try
             {
                 _logger.LogInformation("Adicionando registro...");
 
@@ -208,60 +195,78 @@ namespace DesafioBackendAPI.Controllers.v1
                 if (contadto.Cnpj.Length != 14)
                     return BadRequest("CNPJ deve conter 14 números.");
 
-                var situacao = await Task.Run(() => _baseRepository.GetSituacaoAsync(contadto.Id.Value)).ConfigureAwait(false);
+                var contaExistente = await _repository.GetTrackedAsync(Id, cancellationToken).ConfigureAwait(false);
+                if (contaExistente == null)
+                    return NotFound("Conta inexistente.");
+
+                var situacao = await _baseRepository.GetSituacaoAsync(Id, cancellationToken).ConfigureAwait(false);
                 if (!situacao)
                     return BadRequest("Conta inativa e/ou excluída!");
 
-                if (RetornaReceita.RetornaNome(contadto.Cnpj).Result == null)
+                if (await _retornaReceita.RetornaNome(contadto.Cnpj, cancellationToken).ConfigureAwait(false) == null)
                     return BadRequest("CNPJ inválido.");
 
-                var DtInclusao = await _baseRepository.GetDtInclusaoAsync(Id).ConfigureAwait(false);
+                var arquivoNovo = contadto.Arquivo != null && contadto.Arquivo.Length > 0;
+                var localArquivoAnterior = contaExistente.LocalArquivo;
+                string? local_arquivo = null;
+                if (arquivoNovo)
+                {
+                    var conta_agencia_numero = "_" + contadto.Numero + contadto.Agencia;
+                    var complemento_nome = RandomNumberGenerator.GetInt32(100000000, int.MaxValue);
+                    local_arquivo = Path.Combine("Armazenamento", conta_agencia_numero + complemento_nome + Path.GetExtension(contadto.Arquivo.FileName));
+                }
 
-                var conta_agencia_numero = "_" + contadto.Numero + contadto.Agencia;
-                var complemento_nome = RandomNumberGenerator.GetInt32(100000000, int.MaxValue);
-                var local_arquivo = Path.Combine("Armazenamento", conta_agencia_numero + complemento_nome + System.IO.Path.GetExtension(contadto.Arquivo.FileName));
-
-                var _conta = _mapper.Map<Conta>(contadto);
+                var _conta = _mapper.Map(contadto, contaExistente);
 
                 //Campos não mapeados
-                _conta.DtInclusao = DtInclusao;
+                _conta.Id = Id;
+                _conta.DtInclusao = contaExistente.DtInclusao;
+                _conta.DtExclusao = contaExistente.DtExclusao;
                 _conta.DtAlteracao = DateTime.Now;
-                _conta.LocalArquivo = local_arquivo;
-                _conta.Saldo = await Task.Run(() => _baseRepository.GetSaldoAsync(contadto.Id.Value)).ConfigureAwait(false);
+                _conta.Saldo = await _baseRepository.GetSaldoAsync(Id, cancellationToken).ConfigureAwait(false);
+                _conta.LocalArquivo = localArquivoAnterior;
 
+                if (arquivoNovo)
+                {
+                    await RetornaArquivo.SalvarArquivoDisco(local_arquivo!, contadto, cancellationToken).ConfigureAwait(false);
+                    _conta.LocalArquivo = local_arquivo;
+                }
 
-                //Adiciona o registro DTO convertido no modelo, no banco de dados.
-                await Task.Run(() => _repository.UpdateAsync(_conta)).ConfigureAwait(false);
+                try
+                {
+                    await _repository.UpdateAsync(_conta, cancellationToken).ConfigureAwait(false);
+                }
+                catch
+                {
+                    if (arquivoNovo)
+                        RetornaArquivo.ExcluirArquivoDisco(local_arquivo);
+                    throw;
+                }
 
-                //Salvar arqquivo em disco só depois de salvar registro no banco de dados.
-                RetornaArquivo.SalvarArquivoDisco(conta_agencia_numero, local_arquivo, contadto);
+                if (arquivoNovo && !string.Equals(localArquivoAnterior, local_arquivo, StringComparison.Ordinal))
+                    RetornaArquivo.ExcluirArquivoDisco(localArquivoAnterior);
 
                 _logger.LogInformation("Registro id: " + _conta.Id + " alterado!");
 
                 return Ok();
             }
-            catch (Exception ex)
-            {
-                _logger.LogError("Ocorreu um erro na requisição: " + ex.Message);
-                return NotFound(ex.Message);
-            }
+
         }
 
         [HttpDelete("{id}")]
-        public async Task<IActionResult> Delete(int id)
+        public async Task<IActionResult> Delete(int id, CancellationToken cancellationToken)
         {
-            try
             {
                 _logger.LogInformation("Deletando registro id: " + id);
 
-                var conta = await _db.Conta.FindAsync(id).ConfigureAwait(false);
+                var conta = await _repository.GetTrackedAsync(id, cancellationToken).ConfigureAwait(false);
 
                 if (conta == null)
                     return NotFound("Registro não encontrado.");
 
                 if (conta.Id.HasValue)
                 {
-                    var saldo = await _baseRepository.GetSaldoAsync(conta.Id.Value).ConfigureAwait(false);
+                    var saldo = await _baseRepository.GetSaldoAsync(conta.Id.Value, cancellationToken).ConfigureAwait(false);
 
                     if (saldo != 0)
                         return BadRequest("Não é possível excluir uma conta com saldo diferente de zero.");
@@ -270,20 +275,16 @@ namespace DesafioBackendAPI.Controllers.v1
                 if (conta.DtExclusao != null)
                     return BadRequest("Não é possível excluir uma conta que já foi excluída.");
 
-                await _repository.DeleteAsync(id).ConfigureAwait(false); // Fix for CRR0029
+                await _repository.DeleteAsync(id, cancellationToken).ConfigureAwait(false);
 
                 _logger.LogInformation("Registro id: " + id + " excluído!");
 
                 return Ok();
             }
-            catch (Exception ex)
-            {
-                _logger.LogError("Ocorreu um erro na requisição: " + ex.Message);
-                return NotFound(ex.Message);
-            }
+
         }
 
-        #endregion CRUD       
+        #endregion CRUD
 
     }
 }
