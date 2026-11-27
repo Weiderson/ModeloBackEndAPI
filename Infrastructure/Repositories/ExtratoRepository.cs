@@ -17,7 +17,12 @@ namespace DesafioBackendAPI.Infrastructure.Repositories
         public async Task<IEnumerable<Transacao>> GetExtratoAsync(int id, int periodo)
         {
 
-            var extrato = await _db.Transacao.Where(w => w.ContaId == id && w.DtInclusao >= DateTime.Now.AddDays(-periodo) || w.ContaId_Destino == id).OrderByDescending(d => d.DtInclusao).ToListAsync().ConfigureAwait(false);
+            var dataLimite = DateTime.Now.AddDays(-periodo);
+            var extrato = await _db.Transacao
+                .Where(w => (w.ContaId == id || w.ContaId_Destino == id) && w.DtInclusao >= dataLimite)
+                .OrderByDescending(d => d.DtInclusao)
+                .ToListAsync()
+                .ConfigureAwait(false);
 
             return extrato ?? Enumerable.Empty<Transacao>();
         }

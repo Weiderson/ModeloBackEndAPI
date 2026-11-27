@@ -101,7 +101,7 @@ namespace DesafioBackendAPI.Controllers.v1
                     return BadRequest("Nome inválido.");
 
 
-                var usuarioExiste = _repository.UsuarioExisteAsync(usuarioDTO.Email);
+                var usuarioExiste = await _repository.UsuarioExisteAsync(usuarioDTO.Email).ConfigureAwait(false);
                 if (usuarioExiste != null)
                     return BadRequest("Usuário já existe.");
 
@@ -115,7 +115,7 @@ namespace DesafioBackendAPI.Controllers.v1
                     usuario.SenhaSalt = hmac.Key;
                 }
 
-                await Task.Run(() => _repository.AddAsync(usuario));
+                await _repository.AddAsync(usuario).ConfigureAwait(false);
                 _logger.LogInformation("Registro adicionado...");
                 return Ok();
             }
@@ -146,7 +146,13 @@ namespace DesafioBackendAPI.Controllers.v1
                 if (usuario == null)
                     return NotFound("Usuário não encontrado.");
 
-                _mapper.Map<Usuario>(usuarioDTO);
+                var id = usuario.Id;
+                var dtInclusao = usuario.DtInclusao;
+                var dtExclusao = usuario.DtExclusao;
+                _mapper.Map(usuarioDTO, usuario);
+                usuario.Id = id;
+                usuario.DtInclusao = dtInclusao;
+                usuario.DtExclusao = dtExclusao;
                 usuario.DtAlteracao = DateTime.Now;
 
                 using (var hmac = new HMACSHA256())
@@ -155,7 +161,7 @@ namespace DesafioBackendAPI.Controllers.v1
                     usuario.SenhaSalt = hmac.Key;
                 }
 
-                await Task.Run(() => _repository.UpdateAsync(usuario)).ConfigureAwait(false);
+                await _repository.UpdateAsync(usuario).ConfigureAwait(false);
                 _logger.LogInformation("Registro atualizado...");
                 return Ok();
             }

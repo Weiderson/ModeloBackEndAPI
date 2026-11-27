@@ -40,11 +40,11 @@ namespace DesafioBackendAPI.Controllers.v2
             {
                 _logger.LogInformation("Buscando registro...");
 
-                var usuario = await Task.FromResult(_repository.GetAsync(email));
+                var usuario = await _repository.GetAsync(email).ConfigureAwait(false);
                 if (usuario == null)
                     return NotFound("Usuário não encontrado.");
 
-                var usuarioDTO = _mapper.Map<IEnumerable<ContaDTO>>(usuario);
+                var usuarioDTO = _mapper.Map<UsuarioDTO>(usuario);
 
                 _logger.LogInformation("Registro retornado...");
                 return Ok(usuarioDTO);

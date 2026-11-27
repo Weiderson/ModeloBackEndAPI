@@ -43,6 +43,9 @@ namespace DesafioBackendAPI.Controllers.v1
                 if (contadto == null)
                     return BadRequest("Dados não podem ser nulos.");
 
+                if (contadto.Arquivo == null || contadto.Arquivo.Length == 0)
+                    return BadRequest("Arquivo da conta não informado.");
+
                 if (!FormataString.SomenteNumeros(contadto.Cnpj))
                     return BadRequest("CNPJ deve conter apenas números.");
 
@@ -67,18 +70,15 @@ namespace DesafioBackendAPI.Controllers.v1
                 conta.DtInclusao = DateTime.Now;
                 conta.Id = null;
 
-                await Task.Run(() => _repository.AddAsync(conta)); //Adiciona o registro DTO convertido no modelo, no banco de dados.
-
-                await RetornaArquivo.SalvarArquivoDisco(conta_agencia_numero, local_arquivo, contadto);
-
-                var apagar_arquivos = Directory.GetFiles("Armazenamento", "conta_agencia_numero*");
-                foreach (var file in apagar_arquivos)
+                await RetornaArquivo.SalvarArquivoDisco(local_arquivo, contadto).ConfigureAwait(false);
+                try
                 {
-                    System.IO.File.Delete(file);
+                    await _repository.AddAsync(conta).ConfigureAwait(false);
                 }
-                using (Stream fileStream = new FileStream(local_arquivo, FileMode.Create))
+                catch
                 {
-                    await contadto.Arquivo.CopyToAsync(fileStream).ConfigureAwait(false);
+                    RetornaArquivo.ExcluirArquivoDisco(local_arquivo);
+                    throw;
                 }
 
                 _logger.LogInformation("Registro id: " + conta.Id + " adicionado!");
@@ -208,33 +208,56 @@ namespace DesafioBackendAPI.Controllers.v1
                 if (contadto.Cnpj.Length != 14)
                     return BadRequest("CNPJ deve conter 14 números.");
 
-                var situacao = await Task.Run(() => _baseRepository.GetSituacaoAsync(contadto.Id.Value)).ConfigureAwait(false);
+                var contaExistente = await _repository.GetAsync(Id).ConfigureAwait(false);
+                if (contaExistente == null)
+                    return NotFound("Conta inexistente.");
+
+                var situacao = await _baseRepository.GetSituacaoAsync(Id).ConfigureAwait(false);
                 if (!situacao)
                     return BadRequest("Conta inativa e/ou excluída!");
 
                 if (RetornaReceita.RetornaNome(contadto.Cnpj).Result == null)
                     return BadRequest("CNPJ inválido.");
 
-                var DtInclusao = await _baseRepository.GetDtInclusaoAsync(Id).ConfigureAwait(false);
+                var arquivoNovo = contadto.Arquivo != null && contadto.Arquivo.Length > 0;
+                var localArquivoAnterior = contaExistente.LocalArquivo;
+                string? local_arquivo = null;
+                if (arquivoNovo)
+                {
+                    var conta_agencia_numero = "_" + contadto.Numero + contadto.Agencia;
+                    var complemento_nome = RandomNumberGenerator.GetInt32(100000000, int.MaxValue);
+                    local_arquivo = Path.Combine("Armazenamento", conta_agencia_numero + complemento_nome + Path.GetExtension(contadto.Arquivo.FileName));
+                }
 
-                var conta_agencia_numero = "_" + contadto.Numero + contadto.Agencia;
-                var complemento_nome = RandomNumberGenerator.GetInt32(100000000, int.MaxValue);
-                var local_arquivo = Path.Combine("Armazenamento", conta_agencia_numero + complemento_nome + System.IO.Path.GetExtension(contadto.Arquivo.FileName));
-
-                var _conta = _mapper.Map<Conta>(contadto);
+                var _conta = _mapper.Map(contadto, contaExistente);
 
                 //Campos não mapeados
-                _conta.DtInclusao = DtInclusao;
+                _conta.Id = Id;
+                _conta.DtInclusao = contaExistente.DtInclusao;
+                _conta.DtExclusao = contaExistente.DtExclusao;
                 _conta.DtAlteracao = DateTime.Now;
-                _conta.LocalArquivo = local_arquivo;
-                _conta.Saldo = await Task.Run(() => _baseRepository.GetSaldoAsync(contadto.Id.Value)).ConfigureAwait(false);
+                _conta.Saldo = await _baseRepository.GetSaldoAsync(Id).ConfigureAwait(false);
+                _conta.LocalArquivo = localArquivoAnterior;
 
+                if (arquivoNovo)
+                {
+                    await RetornaArquivo.SalvarArquivoDisco(local_arquivo!, contadto).ConfigureAwait(false);
+                    _conta.LocalArquivo = local_arquivo;
+                }
 
-                //Adiciona o registro DTO convertido no modelo, no banco de dados.
-                await Task.Run(() => _repository.UpdateAsync(_conta)).ConfigureAwait(false);
+                try
+                {
+                    await _repository.UpdateAsync(_conta).ConfigureAwait(false);
+                }
+                catch
+                {
+                    if (arquivoNovo)
+                        RetornaArquivo.ExcluirArquivoDisco(local_arquivo);
+                    throw;
+                }
 
-                //Salvar arqquivo em disco só depois de salvar registro no banco de dados.
-                RetornaArquivo.SalvarArquivoDisco(conta_agencia_numero, local_arquivo, contadto);
+                if (arquivoNovo && !string.Equals(localArquivoAnterior, local_arquivo, StringComparison.Ordinal))
+                    RetornaArquivo.ExcluirArquivoDisco(localArquivoAnterior);
 
                 _logger.LogInformation("Registro id: " + _conta.Id + " alterado!");
 

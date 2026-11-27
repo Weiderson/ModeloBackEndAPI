@@ -12,7 +12,11 @@ namespace DesafioBackendAPI.Application.Services.Token
 
         public TokenService(IConfiguration configuration)
         {
-            _Key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(configuration["Jwt:Key"]));
+            var jwtKey = configuration["Jwt:Key"];
+            if (string.IsNullOrWhiteSpace(jwtKey))
+                throw new InvalidOperationException("JWT signing key 'Jwt:Key' is required.");
+
+            _Key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey));
         }
 
 
