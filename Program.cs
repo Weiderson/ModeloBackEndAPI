@@ -1,29 +1,23 @@
 ﻿using Asp.Versioning;
 using Asp.Versioning.ApiExplorer;
-using DesafioBackendAPI.Application.Interfaces;
-using DesafioBackendAPI.Application.Options;
-using DesafioBackendAPI.Application.Services;
 using DesafioBackendAPI.Application.Services.Token;
 using DesafioBackendAPI.Configure.Swagger;
+using DesafioBackendAPI.Domain.Model;
 using DesafioBackendAPI.Infrastructure;
-using DesafioBackendAPI.Infrastructure.Exceptions;
-using DesafioBackendAPI.Infrastructure.Configuration;
+using DesafioBackendAPI.Infrastructure.Repositories;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
-using Microsoft.AspNetCore.Authorization;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using Swashbuckle.AspNetCore.SwaggerGen;
 using System.ComponentModel;
 using System.Reflection;
-using System.ComponentModel.DataAnnotations;
 using System.Text;
 using System.Text.Json.Serialization;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddControllers()
-    .AddJsonOptions(options =>
-        options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter()));
+builder.Services.AddControllers();
 
 builder.Services.AddEndpointsApiExplorer();
 
@@ -40,6 +34,8 @@ builder.Services.AddApiVersioning(options =>
 });
 
 builder.Services.AddAutoMapper(AppDomain.CurrentDomain.GetAssemblies());
+builder.Services.AddControllersWithViews();
+
 
 builder.Services.AddSwaggerGen(options =>
 {
@@ -49,15 +45,6 @@ builder.Services.AddSwaggerGen(options =>
 builder.Services.AddTransient<IConfigureOptions<SwaggerGenOptions>, ConfigureSwaggerGenOptions>();
 builder.Services.AddSwaggerJWT();
 
-builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
-builder.Services.AddProblemDetails();
-
-builder.Services.AddOptions<JwtOptions>()
-    .Bind(builder.Configuration.GetSection(JwtOptions.SectionName))
-    .ValidateDataAnnotations()
-    .Validate(options => !string.IsNullOrWhiteSpace(options.Issuer), "JWT issuer is required.")
-    .Validate(options => !string.IsNullOrWhiteSpace(options.Audience), "JWT audience is required.")
-    .ValidateOnStart();
 
 builder.Services.AddCors(options =>
 {
@@ -70,19 +57,22 @@ builder.Services.AddCors(options =>
         });
 });
 
-builder.Services.AddPersistenceServices(builder.Configuration);
+builder.Services.AddDbContext<Contexto>(opt => opt.UseInMemoryDatabase("desafiobackend"));
+builder.Services.AddScoped<IContaRepository, ContaRepository>();
+builder.Services.AddScoped<ITransacaoRepository, TransacaoRepository>();
+builder.Services.AddScoped<IExtratroRepository, ExtratoRepository>();
+builder.Services.AddScoped<IUsuarioRepository, UsuarioRepository>();
+builder.Services.AddScoped<IBaseRepository, BaseRepository>();
+builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
 builder.Services.AddScoped<ITokenService, TokenService>();
-builder.Services.AddHttpClient<IRetornaReceita, RetornaReceita>(client =>
-    client.BaseAddress = new Uri("https://receitaws.com.br/v1/"));
+
+
+
+builder.Services.AddControllers().AddJsonOptions(options =>
+    options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter()));
 
 builder.Services.AddHttpContextAccessor();
 
-builder.Services.AddAuthorization(options =>
-{
-    options.FallbackPolicy = new AuthorizationPolicyBuilder()
-        .RequireAuthenticatedUser()
-        .Build();
-});
 
 builder.Services.AddAuthentication(options =>
 {
@@ -91,27 +81,25 @@ builder.Services.AddAuthentication(options =>
 }
 ).AddJwtBearer(options =>
 {
-    var jwtOptions = builder.Configuration.GetSection(JwtOptions.SectionName).Get<JwtOptions>()
-        ?? throw new ValidationException("JWT configuration is required.");
-    Validator.ValidateObject(jwtOptions, new ValidationContext(jwtOptions), validateAllProperties: true);
-
     options.TokenValidationParameters = new TokenValidationParameters
     {
-        ValidateIssuer = true,
-        ValidIssuer = jwtOptions.Issuer,
-        ValidateAudience = true,
-        ValidAudience = jwtOptions.Audience,
+        ValidateIssuer = false,
+        ValidateAudience = false,
         ValidateLifetime = true,
         ValidateIssuerSigningKey = true,
-        RequireExpirationTime = true,
-        RequireSignedTokens = true,
-        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtOptions.Key)),
+        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"])),
         ClockSkew = TimeSpan.Zero
     };
 });
 
+
 var app = builder.Build();
-app.UseExceptionHandler();
+//Adicionar novos registros para as tabelas.
+//using (var scope = app.Services.CreateScope())
+//{
+//    var dbContext = scope.ServiceProvider.GetRequiredService<Contexto>();
+//    DataSeeder.SeedData(scope.ServiceProvider);
+//}
 
 var versionDescriptionProvider = app.Services.GetRequiredService<IApiVersionDescriptionProvider>();
 if (app.Environment.IsDevelopment() || app.Environment.IsProduction())
@@ -129,7 +117,6 @@ if (app.Environment.IsDevelopment() || app.Environment.IsProduction())
 
 app.UseHttpsRedirection();
 app.UseRouting();
-app.UseCors("MyPolicy");
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();

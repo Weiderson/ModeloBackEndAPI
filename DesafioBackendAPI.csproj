@@ -8,10 +8,6 @@
 		<GenerateDocumentationFile>True</GenerateDocumentationFile>
 	</PropertyGroup>
 	<ItemGroup>
-	  <Content Remove="Tests\**\*" />
-	  <Compile Remove="Tests\**\*.cs" />
-	  <EmbeddedResource Remove="Tests\**\*" />
-	  <None Remove="Tests\**\*" />
 	  <Compile Remove="Application\Enums\Tipo.cs" />
 	  <Compile Remove="Application\Services\IServiceCollection.cs" />
 	  <Compile Remove="Controllers\v2\ClientesController.cs" />
@@ -23,6 +19,7 @@
 		<PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="9.0.4" />
 		<PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="9.0.4" />
 		<PackageReference Include="Microsoft.EntityFrameworkCore" Version="9.0.4" />
+		<PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" Version="9.0.4" />
 		<PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="9.0.4" />
 		<PackageReference Include="Microsoft.EntityFrameworkCore.Tools" Version="9.0.4">
 			<PrivateAssets>all</PrivateAssets>

@@ -1,64 +1,74 @@
-using Asp.Versioning;
+﻿using Asp.Versioning;
+using AutoMapper;
 using DesafioBackendAPI.Application.DTOs;
 using DesafioBackendAPI.Application.Enums;
-using DesafioBackendAPI.Domain.Repositories;
-using Microsoft.AspNetCore.Authorization;
+using DesafioBackendAPI.Domain.Model;
+using DesafioBackendAPI.Infrastructure;
 using Microsoft.AspNetCore.Mvc;
 
 namespace DesafioBackendAPI.Controllers.v1
 {
     [ApiController]
-    [AllowAnonymous]
     [Route("api/v{version:apiVersion}/Extrato")]
     [ApiVersion("1.0")]
     public class ExtratroController : ControllerBase
     {
-        private readonly IExtratoRepository _repository;
-        private readonly ILogger<ExtratroController> _logger;
+        private readonly Contexto _db;
+        private readonly IExtratroRepository _repository;
+        private readonly ILogger<ContaController> _logger;
+        private readonly IMapper _mapper;
         private readonly IBaseRepository _baseRepository;
 
-        public ExtratroController(ILogger<ExtratroController> logger, IExtratoRepository repository, IBaseRepository baseRepository)
+        public ExtratroController(Contexto db, ILogger<ContaController> logger, IExtratroRepository repository, IMapper mapper, IBaseRepository baseRepository)
         {
+            _db = db;
             _repository = repository;
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+            _mapper = mapper;
             _baseRepository = baseRepository;
         }
 
         #region SALDO E EXTRATO
 
         [HttpGet("Saldo/{ContaId}")]
-        public async Task<IActionResult> GetSaldo(int ContaId, CancellationToken cancellationToken)
+        public async Task<IActionResult> GetSaldo(int ContaId)
         {
+            try
             {
                 _logger.LogInformation("Buscando saldo...");
 
                 if (ContaId <= 0)
                     return BadRequest("Id inválido.");
 
-                var situacao = await _baseRepository.GetSituacaoAsync(ContaId, cancellationToken).ConfigureAwait(false);
+                var situacao = await Task.Run(() => _baseRepository.GetSituacaoAsync(ContaId)).ConfigureAwait(false);
                 if (!situacao)
                     return BadRequest("Conta inativa e/ou excluída!");
 
-                var saldo = await _baseRepository.GetSaldoAsync(ContaId, cancellationToken).ConfigureAwait(false);
+                var saldo = await Task.Run(() => _baseRepository.GetSaldoAsync(ContaId)).ConfigureAwait(false);
 
                 _logger.LogInformation("Saldo retornado.");
 
                 return Ok(saldo); //Retorna solicitação com DTOs
             }
-
+            catch (Exception ex)
+            {
+                _logger.Log(LogLevel.Error, "Ocorreu um erro na requisição: " + ex.Message);
+                return NotFound(ex.Message);
+            }
         }
 
 
         [HttpGet("Extrato")]
-        public async Task<IActionResult> GetExtrato([FromQuery] ExtratoDTO ExtratoDTO, CancellationToken cancellationToken)
+        public async Task<IActionResult> GetExtrato([FromQuery] ExtratoDTO ExtratoDTO)
         {
+            try
             {
                 _logger.LogInformation("Buscando extrato...");
 
                 if (ExtratoDTO.ContaId <= 0)
                     return BadRequest("Id inválido.");
 
-                var situacao = await _baseRepository.GetSituacaoAsync(ExtratoDTO.ContaId, cancellationToken).ConfigureAwait(false);
+                var situacao = await Task.Run(() => _baseRepository.GetSituacaoAsync(ExtratoDTO.ContaId)).ConfigureAwait(false);
                 if (!situacao)
                     return BadRequest("Conta inativa e/ou excluída!");
 
@@ -73,7 +83,7 @@ namespace DesafioBackendAPI.Controllers.v1
                     ExtratoPeriodo.Ano => 365
                 };
 
-                var _extrato = await _repository.GetExtratoAsync(ExtratoDTO.ContaId, periodo, cancellationToken).ConfigureAwait(false);
+                var _extrato = await Task.Run(() => _repository.GetExtratoAsync(ExtratoDTO.ContaId, periodo)).ConfigureAwait(false);
                 if (!_extrato.Any())
                     return NotFound("Não existe transações para o período informado.");
 
@@ -81,7 +91,7 @@ namespace DesafioBackendAPI.Controllers.v1
 
                 var linha = "------------------------------------------------------------------------------------------";
 
-                var saldo = await _baseRepository.GetSaldoAsync(ExtratoDTO.ContaId, cancellationToken).ConfigureAwait(false);
+                var saldo = await Task.Run(() => _baseRepository.GetSaldoAsync(ExtratoDTO.ContaId)).ConfigureAwait(false);
                 string saldocompleto = DateTime.Now + " - SALDO: " + saldo.ToString();
 
                 _listaExtrado.Add(linha);
@@ -119,7 +129,11 @@ namespace DesafioBackendAPI.Controllers.v1
 
                 return Ok(_listaExtrado);
             }
-
+            catch (Exception ex)
+            {
+                _logger.Log(LogLevel.Error, "Ocorreu um erro na requisição: " + ex.Message);
+                return NotFound(ex.Message);
+            }
         }
 
         #endregion Saldo e Extrato

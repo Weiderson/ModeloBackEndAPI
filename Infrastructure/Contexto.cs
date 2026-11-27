@@ -5,7 +5,21 @@ namespace DesafioBackendAPI.Infrastructure
 {
     public partial class Contexto : DbContext
     {
-        public Contexto(DbContextOptions<Contexto> options) : base(options) { }
+        private readonly IConfiguration _configuration;
+        private readonly string _connectionString;
+
+        public Contexto(IConfiguration configuratation)
+        {
+            _configuration = configuratation;
+            _connectionString = _configuration.GetConnectionString("DefaultConnection");
+        }
+
+        protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
+        {
+            optionsBuilder.UseMySQL(_connectionString)
+                .EnableSensitiveDataLogging()
+                    .EnableDetailedErrors();
+        }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {

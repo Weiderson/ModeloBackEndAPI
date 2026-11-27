@@ -1,5 +1,4 @@
 ﻿using DesafioBackendAPI.Application.ViewModel;
-using DesafioBackendAPI.Application.Interfaces;
 using Newtonsoft.Json;
 using System.Net.Http.Headers;
 
@@ -8,40 +7,39 @@ namespace DesafioBackendAPI.Application.Services
     /// <summary>
     /// Serviço responsável por retornar o nome associado a um CNPJ consultando a ReceitaWS.
     /// </summary>
-    public class RetornaReceita : IRetornaReceita
+    public class RetornaReceita
     {
-        private readonly HttpClient _httpClient;
-
-        public RetornaReceita(HttpClient httpClient)
-        {
-            _httpClient = httpClient;
-        }
-
         /// <summary>
         /// Retorna o nome associado ao CNPJ fornecido.
         /// </summary>
         /// <param name="cnpj">O CNPJ a ser consultado.</param>
         /// <returns>O nome associado ao CNPJ ou null se não encontrado.</returns>
-        public async Task<string?> RetornaNome(string cnpj, CancellationToken cancellationToken = default)
+        public static async Task<string?> RetornaNome(string cnpj)
         {
-            using var request = new HttpRequestMessage(HttpMethod.Get, "cnpj/" + cnpj);
-            request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-            using var response = await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
-            if (response.IsSuccessStatusCode)
-            {
-                var content = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
-                if (!string.IsNullOrEmpty(content))
-                {
-                    var receitaCnpj = JsonConvert.DeserializeObject<ReceitaCnpjVM>(content);
-                    return receitaCnpj?.Nome;
-                }
-            }
-            else if ((int)response.StatusCode == 429)
-            {
-                return "TooManyRequests";
-            }
+            Uri uri = new Uri("https://receitaws.com.br/v1/");
 
-            return null;
+            using (var client = new HttpClient())
+            {
+                client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+                client.BaseAddress = uri;
+
+                HttpResponseMessage response = await client.GetAsync("cnpj/" + cnpj).ConfigureAwait(false);
+                if (response.IsSuccessStatusCode)
+                {
+                    var content = await response.Content.ReadAsStringAsync();
+                    if (!string.IsNullOrEmpty(content))
+                    {
+                        var receitaCnpj = JsonConvert.DeserializeObject<ReceitaCnpjVM>(content);
+                        return receitaCnpj?.Nome;
+                    }
+                }
+                else if ((int)response.StatusCode == 429) // Código de status HTTP 429: Too Many Requests
+                {
+                    return "TooManyRequests";
+                }
+
+                return null;
+            }
         }
     }
 }
